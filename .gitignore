@@ -28,6 +28,7 @@ pnpm-debug.log*
 
 # 工具目录
 .workbuddy/
+.tmp/
 
 # 开发期临时产物
 .preview/

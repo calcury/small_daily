@@ -41,31 +41,46 @@ jobs:
       - name: 校验产物路径都在 /small_daily/ 下
         run: npm run check:deploy
 
-      # 如果仓库的 Pages 被设成了「Deploy from a branch」，工作流产物不会被发布，
+      # Pages 来源必须是「GitHub Actions」，否则工作流产物不会被发布，
       # 分支根目录反而会被原样当站点发出去（于是 index.html 里的 /src/main.tsx、
-      # /manifest.webmanifest 全部 404）。这里幂等地把它纠正为 workflow 构建。
-      - name: 确保 Pages 使用 GitHub Actions 作为来源
+      # /manifest.webmanifest 全部 404）。
+      #
+      # 注意：GITHUB_TOKEN 即使带 pages:write，也无法把 legacy 站点切到 workflow
+      # （PUT 会返回 403，需要仓库管理员 PAT）。所以这里不再"假装自愈"：
+      #   - 若已配置 secrets.PAGES_ADMIN_TOKEN，则用它自动纠正；
+      #   - 否则仅校验，来源不对时直接报错，避免"CI 绿、线上却是旧的"静默故障。
+      - name: 校验 Pages 来源为 GitHub Actions
         env:
+          ADMIN_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}/pages"
-          auth="Authorization: Bearer ${GH_TOKEN}"
           accept="Accept: application/vnd.github+json"
           ver="X-GitHub-Api-Version: 2022-11-28"
+          read_type() {
+            curl -sS -H "Authorization: Bearer $1" -H "$accept" -H "$ver" "$api" \
+              | tr -d '\n' | grep -o '"build_type"[^,]*' | sed 's/.*"\([a-z]*\)"$/\1/'
+          }
 
           echo "--- 当前 Pages 配置 ---"
-          curl -sS -H "$auth" -H "$accept" -H "$ver" "$api" || true
-          echo
-          echo "--- 设置为 workflow 构建 ---"
-          code=$(curl -sS -o /tmp/pages-put.json -w "%{http_code}" -X PUT \
-            -H "$auth" -H "$accept" -H "$ver" "$api" -d '{"build_type":"workflow"}' || echo "000")
-          cat /tmp/pages-put.json 2>/dev/null || true
-          echo
-          echo "HTTP ${code}"
-          case "$code" in
-            2*) echo "✓ Pages 来源已确认为 GitHub Actions" ;;
-            *)  echo "::warning::无法自动把 Pages 来源改成 GitHub Actions（HTTP ${code}）。请到 Settings → Pages → Build and deployment → Source 选择「GitHub Actions」。" ;;
-          esac
+          type=$(read_type "${GH_TOKEN}")
+          echo "build_type = ${type:-<未知>}"
+
+          if [ "$type" != "workflow" ] && [ -n "${ADMIN_TOKEN}" ]; then
+            echo "--- 尝试用 PAGES_ADMIN_TOKEN 纠正为 workflow ---"
+            code=$(curl -sS -o /tmp/pages-put.json -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "$accept" -H "$ver" \
+              "$api" -d '{"build_type":"workflow"}' || echo "000")
+            echo "PUT HTTP ${code}"
+            type=$(read_type "${ADMIN_TOKEN}")
+            echo "build_type = ${type:-<未知>}"
+          fi
+
+          if [ "$type" != "workflow" ]; then
+            echo "::error::Pages 来源为 '${type}'，工作流产物不会被发布。请到 Settings → Pages → Build and deployment → Source 选择「GitHub Actions」；或为本仓库配置 secrets.PAGES_ADMIN_TOKEN（需 repo 权限的 PAT）后重跑。"
+            exit 1
+          fi
+          echo "✓ Pages 来源为 GitHub Actions"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

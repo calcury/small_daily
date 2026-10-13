@@ -94,9 +94,11 @@ npm run check:deploy # 校验构建产物有没有跑到站点根路径上去（
 
 在仓库页面进入 **Settings → Pages**，把 **Build and deployment → Source** 设成 **GitHub Actions**。
 
-> 工作流里加了一步会自动帮你改过来（幂等，不会反复重启）。但如果它报了 `::warning::`，说明 token 权限不够，就得手动去点一下。
+> ⚠️ **这一步必须手动做，工作流改不了它。** `GITHUB_TOKEN` 即使带 `pages: write`，把 legacy 站点切到 workflow 时也会返回 `403`（只有仓库管理员的 PAT 才有权限）。
 >
-> ⚠️ 如果这里停留在 **"Deploy from a branch"**，会出现很迷惑的现象：CI 显示成功，但线上打开是白屏、控制台一堆 404。原因是分支的**根目录被原样当站点发布**了，`index.html` 里的 `/src/main.tsx`、`/manifest.webmanifest` 这些都指向别处。
+> 工作流里的「校验 Pages 来源为 GitHub Actions」这一步会**读取**当前来源：不是 `workflow` 就直接报错，避免出现下面这种「CI 绿、线上却是旧的」的静默故障。若想让它自动纠正，可以在仓库里配置一个带 `repo` 权限的 secret `PAGES_ADMIN_TOKEN`。
+>
+> ⚠️ 如果这里停留在 **"Deploy from a branch"**，会出现很迷惑的现象：CI 显示成功，但线上打开是白屏、控制台一堆 404。原因是分支的**根目录被原样当站点发布**了，`index.html` 里的 `/src/main.tsx`、`/manifest.webmanifest` 这些都指向别处；同时 GitHub 自带的 `pages build and deployment` 工作流也会跑，和我们的部署互相覆盖。判断方法：`curl -s https://calcury.github.io/small_daily/assets/<打包文件名>` —— 如果 404，就是这个坑。
 
 ### 日常发布
 
