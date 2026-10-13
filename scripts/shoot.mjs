@@ -47,6 +47,17 @@ const shiftDay = (key, delta) => {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
 }
 const YESTERDAY_KEY = shiftDay(TODAY_KEY, -1)
+/** 周一起的一周（和 App 里的 startOfWeek 保持一致） */
+const startOfWeekKey = (key) => {
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const day = date.getDay() // 0 = 周日
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day))
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+const WEEK_START = startOfWeekKey(TODAY_KEY)
+/** 昨天是否和今天同一周 —— 决定「本周」计划里要不要算上昨天 */
+const YESTERDAY_IN_WEEK = YESTERDAY_KEY >= WEEK_START
 const NOW_MINUTE = 19 * 60 + 25 // 19:25
 const FIXED_MS = new Date(
   nowDate.getFullYear(),
@@ -80,12 +91,27 @@ demoData.days[YESTERDAY_KEY] = {
 }
 // 计划目标：睡觉每天 8h / 每周 50h，工作每天 4h / 每周 20h。
 // 配合下面「今天」「昨天」的固定作息，首页进度就是确定值：
-//   睡觉：今天 4h（0–4:00）、本周 11h（昨天 7h + 今天 4h）
-//   工作：今天 3h（9:00–12:00，20:00 之后被「此刻」裁掉）、本周 12h（昨天 9h + 今天 3h）
+//   睡觉：今天 4h（0–4:00）、本周 = 今天 4h (+ 昨天 7h，若同周)
+//   工作：今天 3h（9:00–12:00，20:00 之后被「此刻」裁掉）、本周 = 今天 3h (+ 昨天 9h，若同周)
 demoData.plans = [
   { id: 'pl-sleep', statusId: 'sleep', dailyMinutes: 8 * 60, weeklyMinutes: 50 * 60 },
   { id: 'pl-work', statusId: 'work', dailyMinutes: 4 * 60, weeklyMinutes: 20 * 60 },
 ]
+// 「本周」必须确定：gen-demo 只给了随机数据，所以把本周内、昨天之前的那些天直接删掉，
+// 否则「本周至今」会混进随机值（今天不是周二时就会踩到）。
+for (let k = WEEK_START; k < YESTERDAY_KEY; k = shiftDay(k, 1)) delete demoData.days[k]
+/** 分钟 → 紧凑时长，和 App 的 formatCompact 一致（4h / 3h20） */
+const fmtCompact = (minutes) => {
+  const h = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (h === 0) return `${rest}m`
+  if (rest === 0) return `${h}h`
+  return `${h}h${pad2(rest)}`
+}
+const TODAY_SLEEP = 4 * 60
+const TODAY_WORK = 3 * 60
+const WEEK_SLEEP = TODAY_SLEEP + (YESTERDAY_IN_WEEK ? 7 * 60 : 0)
+const WEEK_WORK = TODAY_WORK + (YESTERDAY_IN_WEEK ? 9 * 60 : 0)
 const demoJson = JSON.stringify(demoData)
 
 const chrome = spawn(
@@ -382,20 +408,20 @@ async function main() {
     planCard.rows.map((r) => r.name).join('/')
   )
   expect(
-    '睡觉计划进度：今天 4h/8h、本周 11h/50h',
+    '睡觉计划进度：今天 / 本周',
     JSON.stringify(planCard.rows[0]?.lines) ===
       JSON.stringify([
-        { label: '今天', value: '4h/8h', done: false },
-        { label: '本周', value: '11h/50h', done: false },
+        { label: '今天', value: `${fmtCompact(TODAY_SLEEP)}/8h`, done: false },
+        { label: '本周', value: `${fmtCompact(WEEK_SLEEP)}/50h`, done: false },
       ]),
     JSON.stringify(planCard.rows[0]?.lines)
   )
   expect(
-    '工作计划进度：今天 3h/4h、本周 12h/20h',
+    '工作计划进度：今天 / 本周',
     JSON.stringify(planCard.rows[1]?.lines) ===
       JSON.stringify([
-        { label: '今天', value: '3h/4h', done: false },
-        { label: '本周', value: '12h/20h', done: false },
+        { label: '今天', value: `${fmtCompact(TODAY_WORK)}/4h`, done: false },
+        { label: '本周', value: `${fmtCompact(WEEK_WORK)}/20h`, done: false },
       ]),
     JSON.stringify(planCard.rows[1]?.lines)
   )
