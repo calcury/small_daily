@@ -1,7 +1,8 @@
-import type { AppData, DayRecord, Segment, StatusDef, ThemeMode } from '../types'
+import type { AppData, DayRecord, PlanTarget, Segment, StatusDef, ThemeMode } from '../types'
 import { DAY_MINUTES, NONE_STATUS_ID } from '../types'
 import { newId } from '../lib/id'
 import { normalize } from '../lib/segments'
+import { MAX_DAILY_MINUTES, MAX_WEEKLY_MINUTES, toTargetMinutes } from '../lib/plans'
 
 /**
  * 数据存储层
@@ -61,6 +62,7 @@ export function createEmptyData(): AppData {
     updatedAt: now,
     statuses: DEFAULT_STATUSES.map((s) => ({ ...s })),
     days: {},
+    plans: [],
     theme: 'light',
     trendRange: 7,
   }
@@ -144,12 +146,34 @@ export function sanitize(input: unknown): AppData {
 
   const trendRange = [7, 14, 30].includes(Number(raw.trendRange)) ? Number(raw.trendRange) : 7
 
+  // ---- 计划目标 ----
+  // 只保留指向「真实存在且不是『无』」的状态；一个状态最多一条，重复的丢掉。
+  const plans: PlanTarget[] = []
+  const seenPlanStatus = new Set<string>()
+  if (Array.isArray(raw.plans)) {
+    for (const item of raw.plans) {
+      if (!item || typeof item !== 'object') continue
+      const p = item as Partial<PlanTarget>
+      const statusId = typeof p.statusId === 'string' ? p.statusId : ''
+      if (!validIds.has(statusId) || statusId === NONE_STATUS_ID) continue
+      if (seenPlanStatus.has(statusId)) continue
+      seenPlanStatus.add(statusId)
+      plans.push({
+        id: typeof p.id === 'string' && p.id ? p.id : newId('pl'),
+        statusId,
+        dailyMinutes: toTargetMinutes(p.dailyMinutes, MAX_DAILY_MINUTES),
+        weeklyMinutes: toTargetMinutes(p.weeklyMinutes, MAX_WEEKLY_MINUTES),
+      })
+    }
+  }
+
   return {
     version: DATA_VERSION,
     createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : base.createdAt,
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : base.updatedAt,
     statuses,
     days,
+    plans,
     theme,
     trendRange,
   }

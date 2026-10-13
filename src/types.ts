@@ -39,6 +39,19 @@ export interface DayRecord {
   updatedAt: number
 }
 
+/**
+ * 计划目标：给某个「状态」设一个目标时长。
+ *  - dailyMinutes：每天要做到多少分钟（0 = 不设每日计划）
+ *  - weeklyMinutes：每周总共要做到多少分钟（0 = 不设每周计划）
+ * 一个状态最多一条计划，所以「某一项的总时间」不会重复定义。
+ */
+export interface PlanTarget {
+  id: string
+  statusId: string
+  dailyMinutes: number
+  weeklyMinutes: number
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system'
 
 /** 本地持久化的完整数据结构（写入 localStorage，永不自动清除） */
@@ -48,6 +61,8 @@ export interface AppData {
   updatedAt: number
   statuses: StatusDef[]
   days: Record<string, DayRecord>
+  /** 计划目标（每日 / 每周），一个状态最多一条 */
+  plans: PlanTarget[]
   theme: ThemeMode
   /** 统计图默认展示的天数范围 */
   trendRange: number

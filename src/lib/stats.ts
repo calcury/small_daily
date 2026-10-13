@@ -82,6 +82,27 @@ export function recentStats(
   return rangeStats(data, from, todayKey, todayKey, now)
 }
 
+/**
+ * [from, to] 闭区间内每个状态的累计分钟数（升序日历逐日累加）。
+ * 今天 / 未来的日子会和单日统计一样按「此刻」裁剪，所以「本周至今」是准的。
+ */
+export function rangeByStatus(
+  data: AppData,
+  from: string,
+  to: string,
+  todayKey: string,
+  now: number = nowMinutes()
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const key of dateRange(from, to)) {
+    const stat = dayStat(data, key, todayKey, now)
+    for (const [statusId, minutes] of Object.entries(stat.byStatus)) {
+      out[statusId] = (out[statusId] || 0) + minutes
+    }
+  }
+  return out
+}
+
 /** 把状态列表 + 时长整理成图表可直接消费的序列 */
 export function toStatusSeries(
   statuses: StatusDef[],

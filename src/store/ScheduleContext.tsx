@@ -8,9 +8,17 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { AppData, EditPayload, Segment, StatusDef, ThemeMode } from '../types'
+import type {
+  AppData,
+  EditPayload,
+  PlanTarget,
+  Segment,
+  StatusDef,
+  ThemeMode,
+} from '../types'
 import { DAY_MINUTES, NONE_STATUS_ID } from '../types'
 import { newId } from '../lib/id'
+import { MAX_DAILY_MINUTES, MAX_WEEKLY_MINUTES, toTargetMinutes } from '../lib/plans'
 import { applyRange, emptyDay, normalize } from '../lib/segments'
 import { nowMinutes } from '../lib/time'
 import {
@@ -57,6 +65,18 @@ export interface ScheduleContextValue {
   updateStatus: (id: string, patch: Partial<Pick<StatusDef, 'name' | 'color'>>) => void
   removeStatus: (id: string) => void
   moveStatus: (id: string, delta: number) => void
+
+  /** 计划目标（每日 / 每周），一个状态最多一条 */
+  plans: PlanTarget[]
+  /** 取某状态的计划 */
+  planFor: (statusId: string) => PlanTarget | undefined
+  addPlan: (statusId?: string) => PlanTarget
+  updatePlan: (
+    id: string,
+    patch: Partial<Pick<PlanTarget, 'statusId' | 'dailyMinutes' | 'weeklyMinutes'>>
+  ) => void
+  removePlan: (id: string) => void
+  movePlan: (id: string, delta: number) => void
 
   replaceData: (next: AppData) => void
   resetData: () => void
@@ -299,6 +319,8 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
         ...prev,
         updatedAt: Date.now(),
         statuses: prev.statuses.filter((s) => s.id !== id),
+        // 状态没了，挂在它上面的计划也一起收走
+        plans: prev.plans.filter((p) => p.statusId !== id),
         days,
       }
     })
@@ -316,6 +338,88 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
       const [item] = rest.splice(pos, 1)
       rest.splice(target, 0, item)
       return { ...prev, updatedAt: Date.now(), statuses: noneDef ? [...rest, noneDef] : rest }
+    })
+  }, [])
+
+  // ---------- 计划 ----------
+  const planFor = useCallback(
+    (statusId: string) => data.plans.find((p) => p.statusId === statusId),
+    [data.plans]
+  )
+
+  /** 新建一条计划：默认挑一个还没有计划的状态，避免一上来就重复 */
+  const addPlan = useCallback(
+    (statusId?: string): PlanTarget => {
+      const used = new Set(data.plans.map((p) => p.statusId))
+      const pick =
+        statusId ??
+        data.statuses.find((s) => s.id !== NONE_STATUS_ID && !used.has(s.id))?.id ??
+        data.statuses.find((s) => s.id !== NONE_STATUS_ID)?.id ??
+        NONE_STATUS_ID
+      const created: PlanTarget = {
+        id: newId('pl'),
+        statusId: pick,
+        dailyMinutes: 0,
+        weeklyMinutes: 0,
+      }
+      setData((prev) => ({ ...prev, updatedAt: Date.now(), plans: [...prev.plans, created] }))
+      return created
+    },
+    [data.plans, data.statuses]
+  )
+
+  const updatePlan = useCallback(
+    (
+      id: string,
+      patch: Partial<Pick<PlanTarget, 'statusId' | 'dailyMinutes' | 'weeklyMinutes'>>
+    ) => {
+      setData((prev) => {
+        const current = prev.plans.find((p) => p.id === id)
+        if (!current) return prev
+        const nextStatusId = patch.statusId ?? current.statusId
+        // 改成另一个已有计划的状态时，把冲突的那条收走（一个状态只留一条计划）
+        const plans = prev.plans
+          .filter((p) => p.id === id || p.statusId !== nextStatusId)
+          .map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  statusId: nextStatusId,
+                  dailyMinutes:
+                    patch.dailyMinutes !== undefined
+                      ? toTargetMinutes(patch.dailyMinutes, MAX_DAILY_MINUTES)
+                      : p.dailyMinutes,
+                  weeklyMinutes:
+                    patch.weeklyMinutes !== undefined
+                      ? toTargetMinutes(patch.weeklyMinutes, MAX_WEEKLY_MINUTES)
+                      : p.weeklyMinutes,
+                }
+              : p
+          )
+        return { ...prev, updatedAt: Date.now(), plans }
+      })
+    },
+    []
+  )
+
+  const removePlan = useCallback((id: string) => {
+    setData((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      plans: prev.plans.filter((p) => p.id !== id),
+    }))
+  }, [])
+
+  const movePlan = useCallback((id: string, delta: number) => {
+    setData((prev) => {
+      const plans = [...prev.plans]
+      const pos = plans.findIndex((p) => p.id === id)
+      if (pos < 0) return prev
+      const target = pos + delta
+      if (target < 0 || target >= plans.length) return prev
+      const [item] = plans.splice(pos, 1)
+      plans.splice(target, 0, item)
+      return { ...prev, updatedAt: Date.now(), plans }
     })
   }, [])
 
@@ -361,6 +465,12 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
       updateStatus,
       removeStatus,
       moveStatus,
+      plans: data.plans,
+      planFor,
+      addPlan,
+      updatePlan,
+      removePlan,
+      movePlan,
       replaceData,
       resetData,
       nextStatusColor,
@@ -385,6 +495,11 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
       updateStatus,
       removeStatus,
       moveStatus,
+      planFor,
+      addPlan,
+      updatePlan,
+      removePlan,
+      movePlan,
       replaceData,
       resetData,
       nextStatusColor,

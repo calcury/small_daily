@@ -648,134 +648,185 @@ strong {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- 进度条 ---------- */
+/* ---------- 计划进度（首页） ---------- */
 
-.legend-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 3px;
-  display: inline-block;
-}
-
-.legend-swatch--solid {
-  background: var(--text-2);
-  margin-right: 3px;
-}
-
-.legend-swatch--soft {
-  background: var(--text-2);
-  opacity: 0.35;
-  margin-left: 8px;
-  margin-right: 3px;
-}
-
-.prog-scale {
-  position: relative;
-  height: 14px;
-  margin-bottom: 4px;
-}
-
-.prog-scale-tick {
-  position: absolute;
-  font-size: 10px;
-  color: var(--text-3);
-  transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
-}
-
-.prog-scale-tick:first-child {
-  transform: translateX(0);
-}
-
-.prog-scale-tick:last-child {
-  transform: translateX(-100%);
-}
-
-.prog-list {
+.plan-list {
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 14px;
 }
 
-.prog-head {
+.plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-item-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 5px;
 }
 
-.prog-dot {
-  width: 9px;
-  height: 9px;
+.plan-dot {
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
   flex: none;
 }
 
-.prog-name {
-  font-size: 13px;
+.plan-name {
+  font-size: 13.5px;
   font-weight: 600;
 }
 
-.prog-percent {
+.plan-line {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-line-label {
   font-size: 11px;
   color: var(--text-3);
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  white-space: nowrap;
 }
 
-.prog-duration {
-  font-size: 12.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  min-width: 62px;
-  text-align: right;
-}
-
-.prog-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.prog-track {
+.plan-bar {
   position: relative;
-  height: 9px;
+  height: 8px;
   border-radius: 999px;
   background: var(--surface-2);
   overflow: hidden;
 }
 
-.prog-track--compare {
-  height: 7px;
-}
-
-.prog-fill {
+.plan-fill {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 999px;
   transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  min-width: 0;
 }
 
-.prog-track--compare .prog-fill {
-  filter: saturate(0.85);
-}
-
-.prog-foot {
-  display: flex;
+.plan-line-value {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 4px;
-  font-size: 11px;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 76px;
+  font-size: 11.5px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
 
-.prog-delta.is-up {
+.plan-line-value b {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.plan-line.is-done .plan-line-value b {
   color: var(--accent);
 }
 
-.prog-delta.is-down {
+.plan-check {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+/* ---------- 计划编辑（计划页） ---------- */
+
+.select-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.select-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.plan-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.plan-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-edit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.plan-field {
+  flex: 1 1 128px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.plan-field-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.plan-field-input {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 5px 9px;
+}
+
+.plan-field-input:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.plan-num-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-field-unit {
+  flex: none;
+  font-size: 11.5px;
   color: var(--text-3);
 }
 
@@ -2184,10 +2235,6 @@ strong {
 
   .kpi-v {
     font-size: 17px;
-  }
-
-  .prog-duration {
-    min-width: 54px;
   }
 
   .donut-row {

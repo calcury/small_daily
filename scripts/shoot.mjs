@@ -78,6 +78,14 @@ demoData.days[YESTERDAY_KEY] = {
   ],
   updatedAt: Date.now(),
 }
+// 计划目标：睡觉每天 8h / 每周 50h，工作每天 4h / 每周 20h。
+// 配合下面「今天」「昨天」的固定作息，首页进度就是确定值：
+//   睡觉：今天 4h（0–4:00）、本周 11h（昨天 7h + 今天 4h）
+//   工作：今天 3h（9:00–12:00，20:00 之后被「此刻」裁掉）、本周 12h（昨天 9h + 今天 3h）
+demoData.plans = [
+  { id: 'pl-sleep', statusId: 'sleep', dailyMinutes: 8 * 60, weeklyMinutes: 50 * 60 },
+  { id: 'pl-work', statusId: 'work', dailyMinutes: 4 * 60, weeklyMinutes: 20 * 60 },
+]
 const demoJson = JSON.stringify(demoData)
 
 const chrome = spawn(
@@ -297,8 +305,8 @@ async function main() {
 
   await shoot('01-today', { width: 390, height: 900, full: true })
   await shoot('02-today-bottom', { clickTab: 0 })
-  await shoot('03-stats', { clickTab: 1, full: true })
-  await shoot('04-settings', { clickTab: 2, full: true })
+  await shoot('03-stats', { clickTab: 2, full: true })
+  await shoot('04-settings', { clickTab: 3, full: true })
   await shoot('05-desktop', { clickTab: 0, width: 1024, height: 900 })
 
   // ---------- 首页结构断言 ----------
@@ -345,6 +353,158 @@ async function main() {
 
   // 描述性文本
   expect('描述性 / 说明性文本已清除', home.proseLeft.length === 0, home.proseLeft.join(', '))
+
+  // ---------- 计划：每日 / 每周目标 + 首页进度（取代原「状态进度」） ----------
+  const planCard = await evaluate(`({
+    hasCard: [...document.querySelectorAll('.card-title')].some(h => h.textContent.trim() === '计划进度'),
+    removedOld: document.querySelectorAll('.prog-list, .prog-track, .prog-scale, .legend-swatch').length,
+    tabs: [...document.querySelectorAll('.tabbar-item span')].map(s => s.textContent.trim()),
+    rows: [...document.querySelectorAll('.plan-item')].map(li => ({
+      name: li.querySelector('.plan-name')?.textContent ?? '',
+      lines: [...li.querySelectorAll('.plan-line')].map(l => ({
+        label: l.querySelector('.plan-line-label')?.textContent ?? '',
+        value: l.querySelector('.plan-line-value')?.textContent?.trim() ?? '',
+        done: l.classList.contains('is-done')
+      }))
+    }))
+  })`)
+  console.log('首页计划进度:', JSON.stringify(planCard))
+  expect('首页有「计划进度」板块', planCard.hasCard)
+  expect('原「状态进度」已移除', planCard.removedOld === 0, String(planCard.removedOld))
+  expect(
+    '底部导航为 今日 / 计划 / 统计 / 设置',
+    planCard.tabs.join('/') === '今日/计划/统计/设置',
+    planCard.tabs.join('/')
+  )
+  expect(
+    '计划进度按状态列出（睡觉 / 工作）',
+    planCard.rows.map((r) => r.name).join('/') === '睡觉/工作',
+    planCard.rows.map((r) => r.name).join('/')
+  )
+  expect(
+    '睡觉计划进度：今天 4h/8h、本周 11h/50h',
+    JSON.stringify(planCard.rows[0]?.lines) ===
+      JSON.stringify([
+        { label: '今天', value: '4h/8h', done: false },
+        { label: '本周', value: '11h/50h', done: false },
+      ]),
+    JSON.stringify(planCard.rows[0]?.lines)
+  )
+  expect(
+    '工作计划进度：今天 3h/4h、本周 12h/20h',
+    JSON.stringify(planCard.rows[1]?.lines) ===
+      JSON.stringify([
+        { label: '今天', value: '3h/4h', done: false },
+        { label: '本周', value: '12h/20h', done: false },
+      ]),
+    JSON.stringify(planCard.rows[1]?.lines)
+  )
+  await shoot('03b-plans-home')
+
+  // 切到「计划」页
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[1].click(); 'ok'` },
+    sessionId
+  )
+  await wait(450)
+  const plansTab = await evaluate(`({
+    rows: document.querySelectorAll('.plan-edit-row').length,
+    statuses: [...document.querySelectorAll('.plan-edit-row .select-input')].map(s => s.value),
+    fields: [...document.querySelectorAll('.plan-edit-row .plan-field-label')].map(s => s.textContent.trim()),
+    values: [...document.querySelectorAll('.plan-edit-row .plan-num-input')].map(i => i.value)
+  })`)
+  console.log('计划页:', JSON.stringify(plansTab))
+  expect('计划页列出两条计划', plansTab.rows === 2, String(plansTab.rows))
+  expect(
+    '计划可指定状态 + 每天 / 每周目标',
+    plansTab.statuses.join('/') === 'sleep/work' && plansTab.fields.join('/') === '每天/每周/每天/每周',
+    `${plansTab.statuses.join('/')} · ${plansTab.fields.join('/')}`
+  )
+  expect('每天 / 每周目标回填为小时数', plansTab.values.join('/') === '8/50/4/20', plansTab.values.join('/'))
+  await shoot('03c-plans-tab', { full: true })
+
+  // 新建一条计划
+  await evaluate(
+    `(() => { [...document.querySelectorAll('button')].find(b => b.textContent.includes('新建计划'))?.click(); return 'ok' })()`
+  )
+  await wait(400)
+  const afterAddPlan = await evaluate(`({
+    rows: document.querySelectorAll('.plan-edit-row').length,
+    stored: JSON.parse(localStorage.getItem('small-daily:data:v1')).plans.length
+  })`)
+  console.log('新建计划后:', JSON.stringify(afterAddPlan))
+  expect('「新建计划」能新增一条', afterAddPlan.rows === 3 && afterAddPlan.stored === 3, JSON.stringify(afterAddPlan))
+
+  // 删掉刚加的那条（ConfirmButton 是两步确认，点两下）
+  await evaluate(
+    `(() => { const rows = document.querySelectorAll('.plan-edit-row'); rows[rows.length - 1].querySelector('.icon-btn--danger')?.click(); return 'ok' })()`
+  )
+  await wait(150)
+  await evaluate(
+    `(() => { const rows = document.querySelectorAll('.plan-edit-row'); rows[rows.length - 1].querySelector('.icon-btn--danger')?.click(); return 'ok' })()`
+  )
+  await wait(400)
+  const afterDelPlan = await evaluate(`JSON.parse(localStorage.getItem('small-daily:data:v1')).plans.length`)
+  console.log('删除计划后剩余:', afterDelPlan)
+  expect('删除计划生效', afterDelPlan === 2, String(afterDelPlan))
+
+  // 把「睡觉」的每天目标改成 4 小时 → 首页应该立刻显示「已完成」
+  await evaluate(`(() => {
+    const input = document.querySelector('.plan-edit-row .plan-num-input')
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    setter.call(input, '4')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    return 'ok'
+  })()`)
+  await wait(500)
+  const editedPlan = await evaluate(
+    `JSON.parse(localStorage.getItem('small-daily:data:v1')).plans[0].dailyMinutes`
+  )
+  console.log('睡觉每天目标改为:', editedPlan)
+  expect('修改每日目标已落盘', editedPlan === 240, String(editedPlan))
+
+  // 回首页，第一行应该打勾了
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[0].click(); 'ok'` },
+    sessionId
+  )
+  await wait(450)
+  const doneLine = await evaluate(`(() => {
+    const line = document.querySelector('.plan-item .plan-line')
+    return {
+      label: line?.querySelector('.plan-line-label')?.textContent ?? null,
+      value: line?.querySelector('.plan-line-value')?.textContent?.trim() ?? null,
+      done: line?.classList.contains('is-done') ?? false,
+      hasCheck: !!line?.querySelector('.plan-check svg')
+    }
+  })()`)
+  console.log('达成后的进度行:', JSON.stringify(doneLine))
+  expect('目标达成后标记为已完成（带对勾）', doneLine.done === true && doneLine.hasCheck, JSON.stringify(doneLine))
+  expect('达成后显示 4h/4h', doneLine.label === '今天' && doneLine.value === '4h/4h', JSON.stringify(doneLine))
+
+  // 复原成 8h，别影响后面的断言
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[1].click(); 'ok'` },
+    sessionId
+  )
+  await wait(350)
+  await evaluate(`(() => {
+    const input = document.querySelector('.plan-edit-row .plan-num-input')
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    setter.call(input, '8')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    return 'ok'
+  })()`)
+  await wait(400)
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[0].click(); 'ok'` },
+    sessionId
+  )
+  await wait(400)
 
   // ---------- 小工具 ----------
   /** 按时间轴上的百分比位置点一下 */
@@ -641,7 +801,7 @@ async function main() {
   // ---------- 数据面板：并排两个按钮、无示例数据、清空走弹窗 ----------
   await cdp.send(
     'Runtime.evaluate',
-    { expression: `document.querySelectorAll('.tabbar-item')[2].click(); 'ok'` },
+    { expression: `document.querySelectorAll('.tabbar-item')[3].click(); 'ok'` },
     sessionId
   )
   await wait(450)
@@ -799,7 +959,7 @@ async function main() {
   // ---------- 版本：释放资源重新 fetch，但不动缓存数据 ----------
   await cdp.send(
     'Runtime.evaluate',
-    { expression: `document.querySelectorAll('.tabbar-item')[2].click(); 'ok'` },
+    { expression: `document.querySelectorAll('.tabbar-item')[3].click(); 'ok'` },
     sessionId
   )
   await wait(450)

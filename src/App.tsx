@@ -9,23 +9,25 @@ import {
   monthDayLabel,
   nowMinutes,
   shortDateLabel,
+  startOfWeek,
   toDateKey,
   weekdayLabel,
 } from './lib/time'
 import { clipSegments, segmentAt, trackedMinutes } from './lib/segments'
-import { dayStat } from './lib/stats'
+import { dayStat, rangeByStatus } from './lib/stats'
 import { Header } from './components/Header'
 import { CalendarSheet } from './components/CalendarSheet'
 import { CurrentStatusCard } from './components/CurrentStatusCard'
 import { Timeline } from './components/Timeline'
-import { StatusProgress } from './components/StatusProgress'
+import { PlanProgress } from './components/PlanProgress'
 import { SegmentEditor } from './components/SegmentEditor'
 import { StatusPicker } from './components/StatusPicker'
+import { PlansTab } from './components/PlansTab'
 import { StatsTab } from './components/StatsTab'
 import { SettingsTab } from './components/SettingsTab'
-import { IconCalendar, IconChartLine, IconGear } from './components/icons'
+import { IconCalendar, IconChartLine, IconGear, IconTarget } from './components/icons'
 
-type TabKey = 'today' | 'stats' | 'settings'
+type TabKey = 'today' | 'plans' | 'stats' | 'settings'
 
 /** 拖动吸附粒度，与编辑器保持一致 */
 const SNAP = 5
@@ -50,6 +52,7 @@ export function App() {
     hasDay,
     applyEdit,
     setStatusFrom,
+    plans,
   } = useSchedule()
 
   const now = useNow(30000)
@@ -90,9 +93,13 @@ export function App() {
     () => dayStat(data, dateKey, todayKey, currentMinute),
     [data, dateKey, todayKey, currentMinute]
   )
-  const compareStats = useMemo(
-    () => dayStat(data, compareKey, todayKey, currentMinute),
-    [data, compareKey, todayKey, currentMinute]
+  /**
+   * 本周（周一起）至今、每个状态累计了多久 —— 用来对照「每周计划」。
+   * 选中的若是过去的日期，就统计到那一天为止。
+   */
+  const weekByStatus = useMemo(
+    () => rangeByStatus(data, startOfWeek(dateKey), dateKey, todayKey, currentMinute),
+    [data, dateKey, todayKey, currentMinute]
   )
 
   const currentSegment = useMemo(
@@ -181,9 +188,8 @@ export function App() {
     notify(`已切换为「${name}」`)
   }
 
-  const progressLabels = isToday
-    ? { today: '今天', compare: '昨天' }
-    : { today: monthDayLabel(dateKey), compare: monthDayLabel(compareKey) }
+  const dayLabel = isToday ? '今天' : shortDateLabel(dateKey)
+  const weekLabel = startOfWeek(dateKey) === startOfWeek(todayKey) ? '本周' : '当周'
 
   return (
     <div className="app">
@@ -254,15 +260,19 @@ export function App() {
                 onAdd={openCreate}
               />
 
-              <StatusProgress
-                statuses={statuses}
-                todayByStatus={stats.byStatus}
-                compareByStatus={compareStats.byStatus}
-                todayLabel={progressLabels.today}
-                compareLabel={progressLabels.compare}
+              <PlanProgress
+                plans={plans}
+                statusMap={statusMap}
+                dayByStatus={stats.byStatus}
+                weekByStatus={weekByStatus}
+                dayLabel={dayLabel}
+                weekLabel={weekLabel}
+                onOpenPlans={() => setTab('plans')}
               />
             </div>
           ) : null}
+
+          {tab === 'plans' ? <PlansTab /> : null}
 
           {tab === 'stats' ? (
             <StatsTab
@@ -284,6 +294,14 @@ export function App() {
           >
             <IconCalendar size={21} />
             <span>今日</span>
+          </button>
+          <button
+            type="button"
+            className={`tabbar-item${tab === 'plans' ? ' is-active' : ''}`}
+            onClick={() => setTab('plans')}
+          >
+            <IconTarget size={21} />
+            <span>计划</span>
           </button>
           <button
             type="button"
