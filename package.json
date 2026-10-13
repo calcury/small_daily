@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
-    "check": "node scripts/run-check.mjs"
+    "check": "node scripts/run-check.mjs",
+    "check:deploy": "node scripts/check-deploy-paths.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

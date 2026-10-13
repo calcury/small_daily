@@ -76,8 +76,9 @@ npm run preview    # 用 dist/ 起一个本地静态服务 → http://localhost:
 ### 其它命令
 
 ```bash
-npm run typecheck  # 只做类型检查
-npm run check      # 区段编辑逻辑自检（含 400 次随机编辑的模糊测试）
+npm run typecheck    # 只做类型检查
+npm run check        # 区段编辑逻辑自检（含 400 次随机编辑的模糊测试）
+npm run check:deploy # 校验构建产物有没有跑到站点根路径上去（见下文「路径约定」）
 ```
 
 `npm run check` 验证的是整个应用最核心的不变式：任何时候时间段都无缝铺满 0:00–24:00、相邻同状态自动合并、清空留出的空洞能重新涂色。
@@ -90,7 +91,11 @@ npm run check      # 区段编辑逻辑自检（含 400 次随机编辑的模糊
 
 ### 一次性设置
 
-在仓库页面进入 **Settings → Pages**，把 **Source** 设成 **GitHub Actions**。（如果这里还停留在 "Deploy from a branch"，CI 会跑但发布不出去。）
+在仓库页面进入 **Settings → Pages**，把 **Build and deployment → Source** 设成 **GitHub Actions**。
+
+> 工作流里加了一步会自动帮你改过来（幂等，不会反复重启）。但如果它报了 `::warning::`，说明 token 权限不够，就得手动去点一下。
+>
+> ⚠️ 如果这里停留在 **"Deploy from a branch"**，会出现很迷惑的现象：CI 显示成功，但线上打开是白屏、控制台一堆 404。原因是分支的**根目录被原样当站点发布**了，`index.html` 里的 `/src/main.tsx`、`/manifest.webmanifest` 这些都指向别处。
 
 ### 日常发布
 
@@ -102,9 +107,21 @@ git push origin main
 
 推送后在仓库的 **Actions** 标签页可以看到 `Deploy to GitHub Pages` 在跑；跑完访问 <https://calcury.github.io/small_daily/> 即可。也可以在 Actions 页面用 `Run workflow` 手动触发。
 
-### 路径约定
+### 路径约定（重要：别和别的仓库打架）
 
-生产构建的 `base` 固定为 `/small_daily/`（见 `vite.config.ts`），对应 `https://<用户名>.github.io/small_daily/`。如果将来仓库改名，改这一处即可。
+本仓库是**项目站点**，发布在 `https://calcury.github.io/small_daily/` 这个**子路径**下；而 `calcury.github.io` 的**根目录属于另一个仓库**（用户站，比如 [calcury.github.io](https://github.com/calcury/calcury.github.io)）。
+
+所以本仓库的产物里**不能出现任何指向根路径的引用**（`/icon.svg`、`/manifest.webmanifest`、`/sw.js` 这种）。一旦出现，浏览器会跑到根目录去取文件 —— 轻则 404，重则加载到别的仓库的内容；如果注册了根作用域的 Service Worker，还会反过来控制你所有的项目页。
+
+约定如下：
+
+- `vite.config.ts` 里生产环境的 `base` 固定为 `/small_daily/`。
+- `index.html` 里引用 public 资源统一用 `%BASE_URL%` 前缀（构建时会替换成 `/small_daily/`），不要硬写 `/xxx`。
+- Service Worker 用 `` `${import.meta.env.BASE_URL}sw.js` `` 注册，作用域自然收敛在 `/small_daily/` 内。
+- `manifest.webmanifest` 内部一律用**相对路径**（`"src": "icon.svg"`、`"scope": "."`）。
+- `npm run check:deploy` 会在 CI 里把守这条线：只要产物里出现根路径引用（或引用了不存在的文件），构建直接失败。
+
+如果将来仓库改名，改 `vite.config.ts` 里的 `base`、`scripts/check-deploy-paths.mjs` 里的 `BASE`，以及 README 里的地址即可。
 
 ---
 
