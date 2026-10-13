@@ -114,14 +114,14 @@ git push origin main
 
 本仓库是**项目站点**，发布在 `https://calcury.github.io/small_daily/` 这个**子路径**下；而 `calcury.github.io` 的**根目录属于另一个仓库**（用户站，比如 [calcury.github.io](https://github.com/calcury/calcury.github.io)）。
 
-所以本仓库的产物里**不能出现任何指向根路径的引用**（`/icon.svg`、`/manifest.webmanifest`、`/sw.js` 这种）。一旦出现，浏览器会跑到根目录去取文件 —— 轻则 404，重则加载到别的仓库的内容；如果注册了根作用域的 Service Worker，还会反过来控制你所有的项目页。
+所以本仓库的产物里**不能出现任何指向根路径的引用**（`/small_daily.ico`、`/manifest.webmanifest`、`/sw.js` 这种）。一旦出现，浏览器会跑到根目录去取文件 —— 轻则 404，重则加载到别的仓库的内容；如果注册了根作用域的 Service Worker，还会反过来控制你所有的项目页。
 
 约定如下：
 
 - `vite.config.ts` 里生产环境的 `base` 固定为 `/small_daily/`。
 - `index.html` 里引用 public 资源统一用 `%BASE_URL%` 前缀（构建时会替换成 `/small_daily/`），不要硬写 `/xxx`。
 - Service Worker 用 `` `${import.meta.env.BASE_URL}sw.js` `` 注册，作用域自然收敛在 `/small_daily/` 内。
-- `manifest.webmanifest` 内部一律用**相对路径**（`"src": "icon.svg"`、`"scope": "."`）。
+- `manifest.webmanifest` 内部一律用**相对路径**（`"src": "small_daily.ico"`、`"scope": "."`）。
 - `npm run check:deploy` 会在 CI 里把守这条线：只要产物里出现根路径引用（或引用了不存在的文件），构建直接失败。
 
 如果将来仓库改名，改 `vite.config.ts` 里的 `base`、`scripts/check-deploy-paths.mjs` 里的 `BASE`，以及 README 里的地址即可。
