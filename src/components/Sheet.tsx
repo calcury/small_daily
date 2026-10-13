@@ -88,6 +88,70 @@ export function Segmented<T extends string | number>({
   )
 }
 
+interface ConfirmDialogProps {
+  open: boolean
+  title: string
+  text?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  danger?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}
+
+/** 居中确认弹窗：确定 / 取消 */
+export function ConfirmDialog({
+  open,
+  title,
+  text,
+  confirmLabel = '确定',
+  cancelLabel = '取消',
+  danger,
+  onConfirm,
+  onClose,
+}: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div className="dialog-backdrop" role="presentation" onPointerDown={onClose}>
+      <div
+        className="dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <h3 className="dialog-title">{title}</h3>
+        {text ? <p className="dialog-text">{text}</p> : null}
+        <div className="dialog-actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`}
+            onClick={() => {
+              onConfirm()
+              onClose()
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface ConfirmButtonProps {
   label: string
   confirmLabel?: string

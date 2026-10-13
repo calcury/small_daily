@@ -32,14 +32,7 @@ export function StatusProgress({
     })
 
   if (rows.length === 0) {
-    return (
-      <section className="card" aria-label="状态进度">
-        <div className="card-head">
-          <h2 className="card-title">状态进度</h2>
-        </div>
-        <p className="empty-note">还没有任何记录。点一下当前状态卡片就能开始记录。</p>
-      </section>
-    )
+    return null
   }
 
   return (

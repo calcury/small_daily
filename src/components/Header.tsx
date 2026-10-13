@@ -1,12 +1,22 @@
 import type { ThemeMode } from '../types'
 import { addDays, friendlyDate, monthDayLabel, weekdayLabel } from '../lib/time'
 import type { SaveState } from '../store/ScheduleContext'
-import { IconChevronLeft, IconChevronRight, IconMonitor, IconMoon, IconSun } from './icons'
+import {
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconMonitor,
+  IconMoon,
+  IconSun,
+} from './icons'
 
 interface HeaderProps {
   dateKey: string
   todayKey: string
   onDateChange: (key: string) => void
+  /** 打开日历 */
+  onOpenCalendar: () => void
+  calendarOpen: boolean
   theme: ThemeMode
   onThemeChange: (theme: ThemeMode) => void
   saveState: SaveState
@@ -23,6 +33,8 @@ export function Header({
   dateKey,
   todayKey,
   onDateChange,
+  onOpenCalendar,
+  calendarOpen,
   theme,
   onThemeChange,
   saveState,
@@ -50,6 +62,15 @@ export function Header({
             <span className="save-dot" aria-hidden="true" />
             {saveState === 'saved' ? '已保存' : saveState === 'pending' ? '保存中' : '保存异常'}
           </span>
+          {!isToday ? (
+            <button
+              type="button"
+              className="mini-btn"
+              onClick={() => onDateChange(todayKey)}
+            >
+              回到今天
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-btn"
@@ -78,31 +99,23 @@ export function Header({
           <IconChevronLeft size={20} />
         </button>
 
-        <label className="datenav-center">
+        <button
+          type="button"
+          className="datenav-center"
+          onClick={onOpenCalendar}
+          aria-haspopup="dialog"
+          aria-expanded={calendarOpen}
+          aria-label="打开日历选择日期"
+        >
           <span className="datenav-main">
             {monthDayLabel(dateKey)}
             <span className="datenav-week">{weekdayLabel(dateKey)}</span>
           </span>
           <span className="datenav-sub">
             {isToday ? '今天' : friendlyDate(dateKey, todayKey)}
-            {!isToday ? (
-              <span className="datenav-jump" onClick={() => onDateChange(todayKey)}>
-                {' '}
-                · 回到今天
-              </span>
-            ) : null}
+            <IconChevronDown size={13} className="datenav-caret" />
           </span>
-          <input
-            type="date"
-            className="datenav-input"
-            value={dateKey}
-            max={todayKey}
-            aria-label="选择日期"
-            onChange={(event) => {
-              if (event.target.value) onDateChange(event.target.value)
-            }}
-          />
-        </label>
+        </button>
 
         <button
           type="button"

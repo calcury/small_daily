@@ -34,12 +34,7 @@ export function StatusPicker({
   }, [open, fromMinute])
 
   return (
-    <Sheet
-      open={open}
-      title="切换状态"
-      subtitle="选一个状态，之后的时间就记为它"
-      onClose={onClose}
-    >
+    <Sheet open={open} title="切换状态" onClose={onClose}>
       <div className="switch-from">
         <span className="switch-from-label">从这一刻开始</span>
         <input
@@ -86,11 +81,6 @@ export function StatusPicker({
           )
         })}
       </div>
-
-      <p className="field-hint">
-        {minutesToLabel(from)} 之前的记录不会被改动；这段之前的旧状态会在 {minutesToLabel(from)}{' '}
-        处被截断。
-      </p>
     </Sheet>
   )
 }

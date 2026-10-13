@@ -194,10 +194,6 @@ export function StatsTab({ onOpenDay }: StatsTabProps) {
           }}
         />
 
-        {series.length === 0 ? (
-          <p className="empty-note">这段时间还没有记录，先去「今日」记几笔吧。</p>
-        ) : null}
-
         <div className="chart-legend">
           {series.map((item) => {
             const total = totalsByStatus[item.id] || 0

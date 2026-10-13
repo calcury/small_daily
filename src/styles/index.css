@@ -65,6 +65,22 @@ body {
   padding: 0;
 }
 
+/* 隐藏所有滚动条：内容照常能滚，只是不显示那条竖条 */
+html,
+body,
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -259,7 +275,6 @@ strong {
 
 .datenav-center {
   flex: 1;
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -267,6 +282,7 @@ strong {
   padding: 4px 8px;
   border-radius: 14px;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .datenav-center:active {
@@ -289,23 +305,19 @@ strong {
 }
 
 .datenav-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11.5px;
   color: var(--text-3);
 }
 
-.datenav-jump {
-  color: var(--accent);
+.datenav-caret {
+  transition: transform 0.12s ease;
 }
 
-.datenav-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  border: none;
-  background: none;
-  width: 100%;
-  height: 100%;
+.datenav-center[aria-expanded='true'] .datenav-caret {
+  transform: rotate(180deg);
 }
 
 /* ---------- 通用卡片 ---------- */
@@ -481,12 +493,6 @@ strong {
   font-weight: 650;
 }
 
-.day-summary-sub {
-  font-size: 11.5px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
 .day-summary-stats {
   display: flex;
   gap: 22px;
@@ -571,25 +577,39 @@ strong {
   background: rgba(0, 0, 0, 0.32);
 }
 
-.tl-future {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.5) 0 2px,
-    transparent 2px 6px
-  );
-  pointer-events: none;
+/* 昨天：主时间轴上方一条更细的对照条 */
+.tl-yesterday {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-:root[data-theme='dark'] .tl-future {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(0, 0, 0, 0.4) 0 2px,
-    transparent 2px 6px
-  );
+.tl-yesterday-tag {
+  flex: none;
+  width: 30px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.tl-yesterday-bar {
+  flex: 1;
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.tl-yesterday-seg {
+  height: 100%;
+  flex: none;
+  min-width: 0;
+}
+
+.tl-yesterday-seg.is-none {
+  background: var(--surface-3) !important;
 }
 
 .tl-now {
@@ -626,13 +646,6 @@ strong {
   font-size: 10.5px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
-}
-
-.tl-hint {
-  margin-top: 7px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--text-3);
 }
 
 /* ---------- 进度条 ---------- */
@@ -1507,27 +1520,6 @@ strong {
   opacity: 0.75;
 }
 
-/* 「此刻」之后的部分：还没到，不能编辑 */
-.rtp-locked {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.5) 0 2px,
-    transparent 2px 6px
-  );
-}
-
-:root[data-theme='dark'] .rtp-locked {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(0, 0, 0, 0.4) 0 2px,
-    transparent 2px 6px
-  );
-}
-
 /* 选中的区间：纯视觉，不接收指针事件（拖动只认两条分界线） */
 .rtp-selected {
   position: absolute;
@@ -1632,12 +1624,6 @@ strong {
   font-size: 12px;
   font-weight: 650;
   color: var(--text-2);
-}
-
-.field-hint {
-  font-size: 11.5px;
-  color: var(--text-3);
-  line-height: 1.55;
 }
 
 .time-field {
@@ -1880,14 +1866,6 @@ strong {
   font-weight: 600;
 }
 
-.status-manage-tag {
-  font-size: 10px;
-  color: var(--text-3);
-  background: var(--surface-2);
-  border-radius: 999px;
-  padding: 2px 7px;
-}
-
 .status-manage-usage {
   font-size: 11px;
   color: var(--text-3);
@@ -1980,28 +1958,15 @@ strong {
   font-size: 12px;
 }
 
-.data-note {
-  display: flex;
-  gap: 7px;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--text-2);
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  padding: 10px 11px;
-  margin-bottom: 12px;
-}
-
-.data-note svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--accent);
-}
-
+/* 导出 / 导入左右并排 */
 .data-actions {
   display: flex;
-  flex-direction: column;
   gap: 8px;
+}
+
+.data-actions .btn {
+  flex: 1;
+  width: auto;
 }
 
 .danger-zone {
@@ -2010,35 +1975,130 @@ strong {
   border-top: 1px dashed var(--border);
 }
 
-.danger-note {
-  font-size: 10.5px;
-  color: var(--text-3);
-  margin-top: 6px;
-}
+/* ---------- 弹窗确认 ---------- */
 
-/* ---------- 关于 ---------- */
-
-.about-list {
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
   display: flex;
-  flex-direction: column;
-  gap: 11px;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(15, 17, 21, 0.42);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
-.about-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.dialog {
+  width: 100%;
+  max-width: 320px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 18px 18px 14px;
 }
 
-.about-list b {
-  font-size: 12.5px;
+.dialog-title {
+  font-size: 15px;
   font-weight: 650;
 }
 
-.about-list span {
-  font-size: 11.5px;
-  color: var(--text-2);
+.dialog-text {
+  margin-top: 6px;
+  font-size: 12.5px;
   line-height: 1.6;
+  color: var(--text-2);
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog-actions .btn {
+  flex: 1;
+  width: auto;
+}
+
+/* ---------- 日历 ---------- */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cal-month {
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-top: 10px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.cal-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.cal-cell:disabled {
+  color: var(--text-3);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cal-cell.is-blank {
+  visibility: hidden;
+}
+
+.cal-cell.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.cal-cell.is-selected {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.cal-cell.is-selected.is-today {
+  box-shadow: none;
+}
+
+.cal-dot {
+  position: absolute;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
 }
 
 /* ---------- Toast ---------- */

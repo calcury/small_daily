@@ -23,6 +23,12 @@ export function CurrentStatusCard({
 }: CurrentStatusCardProps) {
   const elapsed = Math.max(0, nowMinute - segment.start)
   const isNone = status.id === NONE_STATUS_ID
+  /** 今天只显示到「此刻」，未来留白（段可能一直记到 24:00） */
+  const shownEnd = Math.min(segment.end, nowMinute)
+  const rangeText =
+    shownEnd > segment.start
+      ? `${minutesToLabel(segment.start)} — ${minutesToLabel(shownEnd)}`
+      : `${minutesToLabel(segment.start)} 起`
 
   return (
     <section className="card current" aria-label="当前状态">
@@ -49,9 +55,7 @@ export function CurrentStatusCard({
             <IconClock size={15} />
             已持续 {formatDuration(elapsed)}
           </span>
-          <span className="current-range">
-            {minutesToLabel(segment.start)} — {minutesToLabel(segment.end)}
-          </span>
+          <span className="current-range">{rangeText}</span>
         </div>
       </div>
 

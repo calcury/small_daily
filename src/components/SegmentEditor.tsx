@@ -119,11 +119,6 @@ export function SegmentEditor({
       open={open}
       tall
       title={editing && editing.statusId !== NONE_STATUS_ID ? '修改时段' : '设置时段'}
-      subtitle={
-        maxMinute >= DAY_MINUTES
-          ? '拖动两侧的分界线调整时间，背景是当天的其它时段'
-          : '拖动两侧的分界线调整时间；画斜纹的部分还没到，今天只能改到此刻'
-      }
       onClose={onClose}
       footer={
         <div className="sheet-actions">
@@ -266,10 +261,6 @@ export function SegmentEditor({
             )
           })}
         </div>
-        <p className="field-hint">
-          选「无」表示这段时间不记录（灰色）。把分界线拖过别的时段会把它们盖住；
-          把彩色时段拖短，空出来的部分会自动变回「无」，还可以再点它重新指定类型。
-        </p>
       </div>
     </Sheet>
   )

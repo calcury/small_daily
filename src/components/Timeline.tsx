@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Segment, StatusDef } from '../types'
 import { DAY_MINUTES, NONE_STATUS_ID } from '../types'
-import { segmentAt } from '../lib/segments'
+import { clipSegments, segmentAt } from '../lib/segments'
 import { formatCompact, minutesToLabel } from '../lib/time'
 import { IconPlus } from './icons'
 
@@ -12,6 +12,10 @@ interface TimelineProps {
   noneStatus: StatusDef
   /** 今天的当前分钟数；查看历史日期时为 null */
   nowMinute: number | null
+  /** 昨天的时间轴（对照条）；没有记录时可为空数组 */
+  yesterdaySegments: Segment[]
+  /** 昨天对照条左侧的小标签，如「昨天」 */
+  yesterdayLabel: string
   selectedId: string | null
   /** 点选某一段，同时带上点击位置的分钟数 */
   onPick: (segment: Segment, minute: number) => void
@@ -24,17 +28,24 @@ const GRIDLINES = [3, 6, 9, 12, 15, 18, 21]
 /**
  * 24 小时时间轴：一整天的状态分布。
  * 点选按坐标定位（而不是按区段元素），所以再窄的时段也能点中。
+ *
+ * 今天：只画到「此刻」为止，之后一律留白（还没发生的事不显示）。
  */
 export function Timeline({
   segments,
   statusMap,
   noneStatus,
   nowMinute,
+  yesterdaySegments,
+  yesterdayLabel,
   selectedId,
   onPick,
   onAdd,
 }: TimelineProps) {
   const nowPercent = nowMinute === null ? null : (nowMinute / DAY_MINUTES) * 100
+  /** 今天只画到此刻；历史日期画完整一天 */
+  const visibleSegments = nowMinute === null ? segments : clipSegments(segments, nowMinute)
+
   const tapRef = useRef<{
     pointerId: number
     x: number
@@ -71,6 +82,28 @@ export function Timeline({
     onPick(tap.segment, tap.minute)
   }
 
+  const renderSegments = (
+    list: Segment[],
+    className: (segment: Segment, isNone: boolean) => string,
+    withLabel: boolean
+  ) =>
+    list.map((segment) => {
+      const duration = segment.end - segment.start
+      const status = statusMap[segment.statusId] ?? noneStatus
+      const width = (duration / DAY_MINUTES) * 100
+      const isNone = status.id === NONE_STATUS_ID
+      return (
+        <span
+          key={segment.id}
+          className={className(segment, isNone)}
+          style={{ width: `${width}%`, background: isNone ? undefined : status.color }}
+          title={`${minutesToLabel(segment.start)} – ${minutesToLabel(segment.end)} ${status.name}（${formatCompact(duration)}）`}
+        >
+          {withLabel && width >= 7 ? <span className="tl-seg-label">{status.name}</span> : null}
+        </span>
+      )
+    })
+
   return (
     <section className="card timeline-card" aria-label="24 小时时间轴">
       <div className="card-head">
@@ -82,6 +115,20 @@ export function Timeline({
       </div>
 
       <div className="tl-wrap">
+        {/* 昨天：一条更细的对照条 */}
+        {yesterdaySegments.length > 0 ? (
+          <div className="tl-yesterday">
+            <span className="tl-yesterday-tag">{yesterdayLabel}</span>
+            <div className="tl-yesterday-bar">
+              {renderSegments(
+                yesterdaySegments,
+                (_segment, isNone) => `tl-yesterday-seg${isNone ? ' is-none' : ''}`,
+                false
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <div
           className="tl-bar"
           role="group"
@@ -92,25 +139,12 @@ export function Timeline({
             tapRef.current = null
           }}
         >
-          {segments.map((segment) => {
-            const duration = segment.end - segment.start
-            const status = statusMap[segment.statusId] ?? noneStatus
-            const width = (duration / DAY_MINUTES) * 100
-            const showLabel = width >= 7
-            const isNone = status.id === NONE_STATUS_ID
-            return (
-              <span
-                key={segment.id}
-                className={`tl-seg${isNone ? ' is-none' : ''}${
-                  selectedId === segment.id ? ' is-selected' : ''
-                }`}
-                style={{ width: `${width}%`, background: status.color }}
-                title={`${minutesToLabel(segment.start)} – ${minutesToLabel(segment.end)} ${status.name}（${formatCompact(duration)}）`}
-              >
-                {showLabel ? <span className="tl-seg-label">{status.name}</span> : null}
-              </span>
-            )
-          })}
+          {renderSegments(
+            visibleSegments,
+            (segment, isNone) =>
+              `tl-seg${isNone ? ' is-none' : ''}${selectedId === segment.id ? ' is-selected' : ''}`,
+            true
+          )}
 
           {GRIDLINES.map((hour) => (
             <span
@@ -121,14 +155,11 @@ export function Timeline({
             />
           ))}
 
-          {/* 今天：未来时段压半透明，一眼看出「还没发生」 */}
+          {/* 今天：此刻之后的区域保持留白，只有一条「此刻」竖线 */}
           {nowPercent !== null ? (
-            <>
-              <span className="tl-future" style={{ left: `${nowPercent}%` }} aria-hidden="true" />
-              <span className="tl-now" style={{ left: `${nowPercent}%` }} aria-hidden="true">
-                <span className="tl-now-dot" />
-              </span>
-            </>
+            <span className="tl-now" style={{ left: `${nowPercent}%` }} aria-hidden="true">
+              <span className="tl-now-dot" />
+            </span>
           ) : null}
         </div>
 
@@ -154,12 +185,6 @@ export function Timeline({
             )
           })}
         </div>
-
-        <p className="tl-hint">
-          {nowMinute === null
-            ? '点一下任意位置就能改那一段'
-            : '点一下任意位置就能改那一段；斜纹部分还没到，不能改'}
-        </p>
       </div>
     </section>
   )

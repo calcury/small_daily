@@ -5,14 +5,12 @@ import {
   formatBytes,
   lastWriteHistory,
   parseImport,
-  persist,
   storageUsage,
   type StorageUsage,
 } from '../store/storage'
-import { withDemoData } from '../lib/demo'
 import { toDateKey } from '../lib/time'
-import { ConfirmButton } from './Sheet'
-import { IconDownload, IconSpark, IconTrash, IconUpload } from './icons'
+import { ConfirmDialog } from './Sheet'
+import { IconDownload, IconTrash, IconUpload } from './icons'
 
 interface DataPanelProps {
   data: AppData
@@ -24,6 +22,7 @@ interface DataPanelProps {
 export function DataPanel({ data, onReplace, onNotify, onReset }: DataPanelProps) {
   const [usage, setUsage] = useState<StorageUsage | null>(null)
   const [lastWrite, setLastWrite] = useState<number | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -93,17 +92,10 @@ export function DataPanel({ data, onReplace, onNotify, onReset }: DataPanelProps
         </div>
       </div>
 
-      <p className="data-note">
-        <IconSpark size={15} />
-        所有内容都会自动保存在这台设备的浏览器里，
-        <strong>不会自动清除</strong>，也不会上传到任何服务器。清除浏览器数据会一并清掉它，
-        所以建议偶尔导出一次备份。
-      </p>
-
       <div className="data-actions">
         <button type="button" className="btn btn--soft" onClick={handleExport}>
           <IconDownload size={16} />
-          导出 JSON 备份
+          导出数据
         </button>
         <button
           type="button"
@@ -111,24 +103,7 @@ export function DataPanel({ data, onReplace, onNotify, onReset }: DataPanelProps
           onClick={() => fileRef.current?.click()}
         >
           <IconUpload size={16} />
-          导入备份
-        </button>
-        <button
-          type="button"
-          className="btn btn--soft"
-          onClick={() => {
-            const result = withDemoData(data, 7)
-            if (result.added === 0) {
-              onNotify('最近 7 天都已有记录，未做改动')
-              return
-            }
-            persist(result.data, { rotateBackup: true })
-            onReplace(result.data)
-            onNotify(`已填充 ${result.added} 天示例数据`)
-          }}
-        >
-          <IconSpark size={16} />
-          填充示例数据
+          导入数据
         </button>
       </div>
 
@@ -145,18 +120,28 @@ export function DataPanel({ data, onReplace, onNotify, onReset }: DataPanelProps
       />
 
       <div className="danger-zone">
-        <ConfirmButton
+        <button
+          type="button"
           className="btn btn--danger"
-          label="清空全部数据"
-          confirmLabel="真的要清空？再点一次"
-          icon={<IconTrash size={16} />}
-          onConfirm={() => {
-            onReset()
-            onNotify('数据已清空（清空前自动留了一份备份）')
-          }}
-        />
-        <p className="danger-note">清空只会重置记录，状态配色会恢复默认。</p>
+          onClick={() => setConfirmReset(true)}
+        >
+          <IconTrash size={16} />
+          清空全部数据
+        </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        danger
+        title="清空全部数据？"
+        text="所有日程记录都会被删除，状态配色恢复默认。清空前会自动留一份备份。"
+        confirmLabel="确定清空"
+        onConfirm={() => {
+          onReset()
+          onNotify('数据已清空（清空前自动留了一份备份）')
+        }}
+        onClose={() => setConfirmReset(false)}
+      />
     </section>
   )
 }

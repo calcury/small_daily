@@ -41,6 +41,12 @@ const pad2 = (n) => String(n).padStart(2, '0')
 const TODAY_KEY = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(
   nowDate.getDate()
 )}`
+const shiftDay = (key, delta) => {
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(y, m - 1, d + delta)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+const YESTERDAY_KEY = shiftDay(TODAY_KEY, -1)
 const NOW_MINUTE = 19 * 60 + 25 // 19:25
 const FIXED_MS = new Date(
   nowDate.getFullYear(),
@@ -59,6 +65,16 @@ demoData.days[TODAY_KEY] = {
     { id: 'fx-rest', start: 12 * 60, end: 13 * 60, statusId: 'rest' },
     { id: 'fx-gap-pm', start: 13 * 60, end: 20 * 60, statusId: 'none' }, // 横跨 19:25
     { id: 'fx-future', start: 20 * 60, end: 24 * 60, statusId: 'work' }, // 全在未来
+  ],
+  updatedAt: Date.now(),
+}
+// 昨天：用来验证时间轴上方那条细的对照轴
+demoData.days[YESTERDAY_KEY] = {
+  date: YESTERDAY_KEY,
+  segments: [
+    { id: 'fy-sleep', start: 0, end: 7 * 60, statusId: 'sleep' },
+    { id: 'fy-work', start: 9 * 60, end: 18 * 60, statusId: 'work' },
+    { id: 'fy-none', start: 18 * 60, end: 24 * 60, statusId: 'none' },
   ],
   updatedAt: Date.now(),
 }
@@ -183,6 +199,8 @@ async function main() {
   await setViewport(390, 900)
 
   // 在每个新文档执行前：固定「此刻」+ 注入示例数据
+  // 注意：示例数据只在「还没有数据」时写入，否则「退出再进」的持久化验证
+  // 会被这份注入脚本覆盖掉，测出来的就是假的。
   await cdp.send(
     'Page.addScriptToEvaluateOnNewDocument',
     {
@@ -199,7 +217,11 @@ async function main() {
           MockDate.prototype = Real.prototype
           window.Date = MockDate
         })()
-        try { localStorage.setItem('small-daily:data:v1', ${JSON.stringify(demoJson)}) } catch (e) {}
+        try {
+          if (!localStorage.getItem('small-daily:data:v1')) {
+            localStorage.setItem('small-daily:data:v1', ${JSON.stringify(demoJson)})
+          }
+        } catch (e) {}
       `,
     },
     sessionId
@@ -276,12 +298,37 @@ async function main() {
     removedSegmentList: document.querySelectorAll('.seg-list, .seg-row, .seg-time').length,
     hasTimeline: !!document.querySelector('.tl-bar'),
     timelineSegments: document.querySelectorAll('.tl-seg').length,
-    addButtons: [...document.querySelectorAll('.mini-btn')].map(b => b.textContent.trim())
+    addButtons: [...document.querySelectorAll('.mini-btn')].map(b => b.textContent.trim()),
+    yesterdayTag: document.querySelector('.tl-yesterday-tag')?.textContent ?? null,
+    yesterdaySegs: document.querySelectorAll('.tl-yesterday-seg').length,
+    visibleWidthSum: [...document.querySelectorAll('.tl-bar .tl-seg')]
+      .reduce((acc, el) => acc + parseFloat(el.style.width || '0'), 0),
+    scrollbarWidth: getComputedStyle(document.documentElement).scrollbarWidth,
+    proseLeft: ['.tl-hint', '.field-hint', '.data-note', '.about-list', '.danger-note', '.day-summary-sub']
+      .filter(sel => document.querySelector(sel) !== null)
   })`)
   console.log('首页结构:', home)
   expect('首页已移除「时段明细」', home.removedSegmentList === 0, String(home.removedSegmentList))
   expect('时间轴仍在', home.hasTimeline)
   expect('时间轴有「添加时段」入口', home.addButtons.includes('添加时段'), home.addButtons.join('/'))
+
+  // 昨天对照条
+  expect('时间轴上方有昨日细对照轴', home.yesterdayTag === '昨天' && home.yesterdaySegs > 0,
+    `tag=${home.yesterdayTag} segs=${home.yesterdaySegs}`)
+
+  // 未来留白：画出来的宽度只到「此刻」（19:25 → 80.9%）
+  const expectedNowPct = (NOW_MINUTE / 1440) * 100
+  expect(
+    '今天的时间轴只画到「此刻」，未来留白',
+    Math.abs(home.visibleWidthSum - expectedNowPct) < 0.6,
+    `画到 ${home.visibleWidthSum.toFixed(2)}%，此刻应在 ${expectedNowPct.toFixed(2)}%`
+  )
+
+  // 滚动条
+  expect('已隐藏滚动条', home.scrollbarWidth === 'none', String(home.scrollbarWidth))
+
+  // 描述性文本
+  expect('描述性 / 说明性文本已清除', home.proseLeft.length === 0, home.proseLeft.join(', '))
 
   // ---------- 小工具 ----------
   /** 按时间轴上的百分比位置点一下 */
@@ -367,7 +414,7 @@ async function main() {
     crossGap.range.start === '13:00' && crossGap.range.end === '19:25',
     JSON.stringify(crossGap.range)
   )
-  expect('未来的部分画出了斜纹', crossGap.locked)
+  expect('未来区间不再画斜纹（留白）', crossGap.locked === false, String(crossGap.locked))
   await shoot('05c-editor-now-limit')
 
   // 右分界线往未来拖，也过不去
@@ -504,6 +551,234 @@ async function main() {
   expect('保存后编辑器关闭', !afterSave.sheetOpen)
   expect('时间轴被改写', afterSave.widths !== beforeSave, '宽度分布未变化')
   await shoot('09-after-save', { width: 390, height: 900, full: true })
+
+  // ---------- 日历：点日期区打开、选一天进入、回到今天 ----------
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelector('.datenav-center').click(); 'ok'` },
+    sessionId
+  )
+  await wait(400)
+  const cal = await evaluate(`({
+    open: !!document.querySelector('.cal-grid'),
+    month: document.querySelector('.cal-month')?.textContent ?? null,
+    cells: document.querySelectorAll('.cal-cell:not(.is-blank)').length,
+    todayCell: !!document.querySelector('.cal-cell.is-today'),
+    dots: document.querySelectorAll('.cal-dot').length
+  })`)
+  console.log('日历:', cal)
+  expect('点中间日期区能打开日历', cal.open)
+  expect(
+    '日历默认显示当前月份',
+    cal.month === `${nowDate.getFullYear()} 年 ${nowDate.getMonth() + 1} 月`,
+    String(cal.month)
+  )
+  expect('日历标出「今天」', cal.todayCell)
+  expect('有记录的日子带小圆点', cal.dots > 0, String(cal.dots))
+  await shoot('10-calendar')
+
+  const [yy, ymm, yd] = YESTERDAY_KEY.split('-').map(Number)
+  const yesterdayLabel = `${ymm} 月 ${yd} 日`
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `document.querySelector('.cal-cell[aria-label="${YESTERDAY_KEY}"]')?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(450)
+  const pastDay = await evaluate(`({
+    header: document.querySelector('.datenav-main')?.textContent ?? null,
+    calendarClosed: !document.querySelector('.cal-grid'),
+    hasJump: !!document.querySelector('.hdr-actions .mini-btn'),
+    fullWidthSum: [...document.querySelectorAll('.tl-bar .tl-seg')].reduce((a, el) => a + parseFloat(el.style.width || '0'), 0)
+  })`)
+  console.log('选到昨天:', pastDay)
+  expect('选日期后日历关闭', pastDay.calendarClosed)
+  expect('头部切到所选日期', (pastDay.header ?? '').includes(yesterdayLabel), String(pastDay.header))
+  expect('出现「回到今天」按钮', pastDay.hasJump)
+  expect(
+    '历史日期显示完整一天（不再截到此刻）',
+    Math.abs(pastDay.fullWidthSum - 100) < 0.6,
+    `${pastDay.fullWidthSum.toFixed(2)}%`
+  )
+  await shoot('11-past-day', { width: 390, height: 900, full: true })
+
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelector('.hdr-actions .mini-btn')?.click(); 'ok'` },
+    sessionId
+  )
+  await wait(450)
+  const backToday = await evaluate(`({
+    sub: document.querySelector('.datenav-sub')?.textContent ?? null,
+    hasJump: !!document.querySelector('.hdr-actions .mini-btn'),
+    widthSum: [...document.querySelectorAll('.tl-bar .tl-seg')].reduce((a, el) => a + parseFloat(el.style.width || '0'), 0)
+  })`)
+  console.log('回到今天:', backToday)
+  expect(
+    '「回到今天」按钮生效',
+    (backToday.sub ?? '').includes('今天') && !backToday.hasJump && Math.abs(backToday.widthSum - expectedNowPct) < 0.6,
+    JSON.stringify(backToday)
+  )
+
+  // ---------- 数据面板：并排两个按钮、无示例数据、清空走弹窗 ----------
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[2].click(); 'ok'` },
+    sessionId
+  )
+  await wait(450)
+  const dataPanel = await evaluate(`({
+    actions: [...document.querySelectorAll('.data-actions .btn')].map(b => b.textContent.trim()),
+    sameRow: (() => {
+      const bs = [...document.querySelectorAll('.data-actions .btn')]
+      if (bs.length < 2) return false
+      const a = bs[0].getBoundingClientRect(), b = bs[1].getBoundingClientRect()
+      return Math.abs(a.top - b.top) < 2 && b.left > a.right - 2
+    })(),
+    hasDemo: [...document.querySelectorAll('button')].some(b => b.textContent.includes('示例数据')),
+    builtinTag: [...document.querySelectorAll('.status-manage-list *')].some(el => el.textContent.trim() === '内置'),
+    jsonWord: [...document.querySelectorAll('button')].some(b => /json/i.test(b.textContent))
+  })`)
+  console.log('数据面板:', dataPanel)
+  expect(
+    '导出 / 导入两个按钮',
+    dataPanel.actions.join(' / ') === '导出数据 / 导入数据',
+    dataPanel.actions.join(' / ')
+  )
+  expect('导出 / 导入左右并排', dataPanel.sameRow)
+  expect('按钮文案不出现 json', dataPanel.jsonWord === false)
+  expect('已删除「填充示例数据」', dataPanel.hasDemo === false)
+  expect('已删除「内置」标签', dataPanel.builtinTag === false)
+
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('button')].find(b => b.textContent.includes('清空全部数据'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(350)
+  const dialog = await evaluate(`({
+    open: !!document.querySelector('.dialog'),
+    title: document.querySelector('.dialog-title')?.textContent ?? null,
+    buttons: [...document.querySelectorAll('.dialog-actions .btn')].map(b => b.textContent.trim()),
+    daysBefore: Object.keys(JSON.parse(localStorage.getItem('small-daily:data:v1')).days).length
+  })`)
+  console.log('清空弹窗:', dialog)
+  expect('清空数据弹出确认弹窗', dialog.open)
+  expect('弹窗提供 取消 / 确定', dialog.buttons.join(' / ') === '取消 / 确定清空', dialog.buttons.join(' / '))
+  await shoot('12-confirm-dialog')
+
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('.dialog-actions .btn')].find(b => b.textContent.includes('取消'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(350)
+  const afterCancel = await evaluate(`({
+    open: !!document.querySelector('.dialog'),
+    daysAfter: Object.keys(JSON.parse(localStorage.getItem('small-daily:data:v1')).days).length
+  })`)
+  console.log('点取消:', afterCancel)
+  expect('取消后弹窗关闭', afterCancel.open === false)
+  expect('取消不会清掉数据', afterCancel.daysAfter === dialog.daysBefore, `${dialog.daysBefore} → ${afterCancel.daysAfter}`)
+
+  // ---------- 离线 / 持久化：选「睡觉」→ 退出 → 再进 ----------
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[0].click(); 'ok'` },
+    sessionId
+  )
+  await wait(400)
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelector('.current-main')?.click(); 'ok'` },
+    sessionId
+  )
+  await wait(400)
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('.picker-item')].find(b => b.textContent.includes('睡觉'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(500)
+  const afterPick = await evaluate(`(() => {
+    const raw = JSON.parse(localStorage.getItem('small-daily:data:v1'))
+    const segs = raw.days['${TODAY_KEY}'].segments
+    const last = segs[segs.length - 1]
+    return {
+      currentName: document.querySelector('.current-name')?.textContent ?? null,
+      tail: { start: last.start, end: last.end, statusId: last.statusId },
+      blankAfterNow: [...document.querySelectorAll('.tl-bar .tl-seg')].reduce((a, el) => a + parseFloat(el.style.width || '0'), 0)
+    }
+  })()`)
+  console.log('选「睡觉」后:', afterPick)
+  expect('当前状态切换为「睡觉」', (afterPick.currentName ?? '').includes('睡觉'), String(afterPick.currentName))
+  expect(
+    '数据里「睡觉」一直记到 24:00（整段时间都标记）',
+    afterPick.tail.statusId === 'sleep' && afterPick.tail.start === NOW_MINUTE && afterPick.tail.end === 1440,
+    JSON.stringify(afterPick.tail)
+  )
+  expect(
+    '即便如此，时间轴此刻之后仍然留白',
+    Math.abs(afterPick.blankAfterNow - expectedNowPct) < 0.6,
+    `${afterPick.blankAfterNow.toFixed(2)}%`
+  )
+
+  await cdp.send('Network.enable', {}, sessionId)
+
+  // 重新加载（模拟「退出再进」）
+  let reloaded = cdp.once('Page.loadEventFired')
+  await cdp.send('Page.reload', {}, sessionId)
+  await reloaded
+  await wait(1100)
+  const afterReload = await evaluate(`({
+    currentName: document.querySelector('.current-name')?.textContent ?? null,
+    hasTimeline: !!document.querySelector('.tl-bar'),
+    swController: !!navigator.serviceWorker.controller,
+    tail: (() => {
+      const raw = JSON.parse(localStorage.getItem('small-daily:data:v1'))
+      const segs = raw.days['${TODAY_KEY}'].segments
+      const last = segs[segs.length - 1]
+      return { start: last.start, end: last.end, statusId: last.statusId }
+    })()
+  })`)
+  console.log('重新进入:', afterReload)
+  expect('重新进入后仍是「睡觉」', (afterReload.currentName ?? '').includes('睡觉'), String(afterReload.currentName))
+  expect('重新进入后数据仍是睡觉到 24:00', afterReload.tail.statusId === 'sleep' && afterReload.tail.end === 1440, JSON.stringify(afterReload.tail))
+  expect('Service Worker 已接管（离线可用的前提）', afterReload.swController)
+
+  // 真正断网，再进一次
+  await cdp.send(
+    'Network.emulateNetworkConditions',
+    { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 },
+    sessionId
+  )
+  reloaded = cdp.once('Page.loadEventFired')
+  await cdp.send('Page.reload', {}, sessionId)
+  await reloaded
+  await wait(1200)
+  const offline = await evaluate(`({
+    hasTimeline: !!document.querySelector('.tl-bar'),
+    hasRoot: (document.querySelector('#root')?.childElementCount ?? 0) > 0,
+    currentName: document.querySelector('.current-name')?.textContent ?? null
+  })`)
+  console.log('离线重进:', offline)
+  expect('离线也能打开（Service Worker 缓存外壳）', offline.hasTimeline && offline.hasRoot)
+  expect('离线时「睡觉」记录仍在', (offline.currentName ?? '').includes('睡觉'), String(offline.currentName))
+  await shoot('13-offline')
+
+  await cdp.send(
+    'Network.emulateNetworkConditions',
+    { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+    sessionId
+  )
 
   ws.close()
   chrome.kill()

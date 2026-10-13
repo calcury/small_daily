@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import type { ThemeMode } from '../types'
-import { NONE_STATUS_ID } from '../types'
 import { useSchedule } from '../store/ScheduleContext'
 import { DataPanel } from './DataPanel'
 import { Segmented } from './Sheet'
@@ -73,34 +72,6 @@ export function SettingsTab() {
         onNotify={notify}
         onReset={resetData}
       />
-
-      <section className="card">
-        <div className="card-head">
-          <h2 className="card-title">关于</h2>
-        </div>
-        <ul className="about-list">
-          <li>
-            <b>数据放在哪</b>
-            <span>只存在这台设备的浏览器里（localStorage），不上传服务器。</span>
-          </li>
-          <li>
-            <b>会自动清吗</b>
-            <span>不会。没有过期时间，也没有任何自动清理逻辑。</span>
-          </li>
-          <li>
-            <b>怎么用当前状态</b>
-            <span>点主界面的状态卡片，选一个状态，从那一刻起的时间就记成它。</span>
-          </li>
-          <li>
-            <b>怎么改历史</b>
-            <span>
-              点时间轴上的任意一段就能打开编辑器，拖动两侧的分界线改开始 / 结束时间，或者换成别的状态；彩色改回「
-              {statuses.find((s) => s.id === NONE_STATUS_ID)?.name ?? '无'}」也一样。今天只能改到「此刻」，画斜纹
-              的部分还没到；昨天以及更早则整天都能改。
-            </span>
-          </li>
-        </ul>
-      </section>
     </div>
   )
 }

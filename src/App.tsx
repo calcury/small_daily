@@ -8,12 +8,14 @@ import {
   formatDuration,
   monthDayLabel,
   nowMinutes,
+  shortDateLabel,
   toDateKey,
   weekdayLabel,
 } from './lib/time'
 import { clipSegments, segmentAt, trackedMinutes } from './lib/segments'
 import { dayStat } from './lib/stats'
 import { Header } from './components/Header'
+import { CalendarSheet } from './components/CalendarSheet'
 import { CurrentStatusCard } from './components/CurrentStatusCard'
 import { Timeline } from './components/Timeline'
 import { StatusProgress } from './components/StatusProgress'
@@ -45,6 +47,7 @@ export function App() {
     flashMessage,
     notify,
     getSegments,
+    hasDay,
     applyEdit,
     setStatusFrom,
   } = useSchedule()
@@ -65,6 +68,7 @@ export function App() {
     statusId: NONE_STATUS_ID,
   })
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
 
   // 不允许浏览未来
   useEffect(() => {
@@ -111,6 +115,11 @@ export function App() {
     () => trackedMinutes(isToday ? clipSegments(segments, currentMinute) : segments),
     [segments, isToday, currentMinute]
   )
+
+  /** 前一天的记录，画在时间轴上方作为对照（没有记录就不显示这条） */
+  const compareSegments = getSegments(compareKey)
+  const compareHasData = compareSegments.some((s) => s.statusId !== NONE_STATUS_ID)
+  const compareLabel = isToday ? '昨天' : shortDateLabel(compareKey)
 
   /**
    * 点选时间轴上的某一处：把这一段作为被选中事件打开（今天截到此刻为止）。
@@ -183,6 +192,8 @@ export function App() {
           dateKey={dateKey}
           todayKey={todayKey}
           onDateChange={setDateKey}
+          onOpenCalendar={() => setCalendarOpen(true)}
+          calendarOpen={calendarOpen}
           theme={theme}
           onThemeChange={setTheme}
           saveState={saveState}
@@ -207,7 +218,6 @@ export function App() {
                       <p className="day-summary-title">
                         {monthDayLabel(dateKey)} · {weekdayLabel(dateKey)}
                       </p>
-                      <p className="day-summary-sub">历史记录，可以直接改</p>
                     </div>
                     <button
                       type="button"
@@ -237,6 +247,8 @@ export function App() {
                 statusMap={statusMap}
                 noneStatus={noneStatus}
                 nowMinute={isToday ? currentMinute : null}
+                yesterdaySegments={compareHasData ? compareSegments : []}
+                yesterdayLabel={compareLabel}
                 selectedId={selectedId}
                 onPick={openEditorAt}
                 onAdd={openCreate}
@@ -315,6 +327,15 @@ export function App() {
         fromMinute={isToday ? currentMinute : 0}
         onPick={handlePickStatus}
         onClose={() => setPickerOpen(false)}
+      />
+
+      <CalendarSheet
+        open={calendarOpen}
+        dateKey={dateKey}
+        todayKey={todayKey}
+        hasRecord={hasDay}
+        onSelect={setDateKey}
+        onClose={() => setCalendarOpen(false)}
       />
 
       {flashMessage ? <div className="toast">{flashMessage}</div> : null}

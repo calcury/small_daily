@@ -186,10 +186,6 @@ export function TimeRangePicker({
             {nowMinute !== null ? (
               <span className="rtp-now" style={{ left: pct(nowMinute) }} />
             ) : null}
-            {/* 「此刻」之后：还不能记录 */}
-            {maxMinute < DAY_MINUTES ? (
-              <span className="rtp-locked" style={{ left: pct(maxMinute) }} />
-            ) : null}
           </div>
 
           {/* 选中的区间：纯视觉，拖动只认两条分界线 */}

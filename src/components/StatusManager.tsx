@@ -125,9 +125,7 @@ export function StatusManager({
           <div className="status-manage-main">
             <span className="color-swatch" style={{ background: '#94a3b8' }} />
             <span className="status-manage-name">无（空闲）</span>
-            <span className="status-manage-tag">内置</span>
           </div>
-          <p className="status-manage-usage">灰色空白时段，不能删除，可以随时给它涂上别的状态。</p>
         </li>
       </ul>
     </section>
