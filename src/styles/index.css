@@ -152,8 +152,8 @@ strong {
 .tab-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 14px;
+  gap: 0;
+  padding: 0 16px;
 }
 
 /* ---------- 头部 ---------- */
@@ -166,7 +166,7 @@ strong {
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--border);
 }
 
 .hdr-row {
@@ -320,14 +320,16 @@ strong {
   transform: rotate(180deg);
 }
 
-/* ---------- 通用卡片 ---------- */
+/* ---------- 通用区块（无卡片风格） ---------- */
 
+/* 区块本身不画盒子：背景透明、无边框、无圆角、无阴影。
+   区块之间的呼吸感与分隔线由 .tab-body 提供，见文件末尾的「区块节奏」。 */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-  box-shadow: var(--shadow-md);
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .card-head {
@@ -367,7 +369,7 @@ strong {
 .current {
   position: relative;
   overflow: hidden;
-  padding: 16px;
+  padding: 0;
 }
 
 .current-glow {
@@ -407,7 +409,7 @@ strong {
   height: 14px;
   border-radius: 50%;
   flex: none;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--surface) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg) 70%, transparent);
 }
 
 .current-name {
@@ -456,7 +458,7 @@ strong {
   gap: 10px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px dashed var(--border);
+  border-top: 1px solid var(--border);
 }
 
 .current-stat {
@@ -739,8 +741,8 @@ strong {
 .select-input {
   flex: 1;
   min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: none;
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 7px 10px;
   font-size: 13.5px;
@@ -755,16 +757,26 @@ strong {
 .plan-edit-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
 }
 
 .plan-edit-row {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  padding: 11px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  padding: 13px 0;
+  border-radius: 0;
+  background: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-edit-row:first-child {
+  padding-top: 2px;
+}
+
+.plan-edit-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .plan-edit-head {
@@ -799,8 +811,8 @@ strong {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: none;
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 5px 9px;
 }
@@ -1056,39 +1068,41 @@ strong {
   color: #fff;
 }
 
-/* ---------- 分段控件 ---------- */
+/* ---------- 分段控件（下划线式，无胶囊外壳） ---------- */
 
 .segmented {
   display: inline-flex;
-  padding: 3px;
+  padding: 0;
   gap: 2px;
-  background: var(--surface-2);
-  border-radius: 999px;
-  border: 1px solid var(--border);
+  background: none;
+  border-radius: 0;
+  border: none;
 }
 
 .segmented-item {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 13px;
-  border-radius: 999px;
+  padding: 7px 12px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-3);
-  transition: background 0.14s ease, color 0.14s ease;
+  transition: color 0.14s ease, border-color 0.14s ease;
   white-space: nowrap;
 }
 
 .segmented--sm .segmented-item {
-  padding: 5px 10px;
+  padding: 4px 8px;
   font-size: 12px;
 }
 
 .segmented-item.is-active {
-  background: var(--surface);
+  background: none;
+  box-shadow: none;
   color: var(--text);
-  box-shadow: var(--shadow-sm);
+  border-bottom-color: var(--accent);
 }
 
 .range-row {
@@ -1150,19 +1164,32 @@ strong {
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 0;
 }
 
 .kpi {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 11px 11px 9px;
-  box-shadow: var(--shadow-sm);
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.kpi:first-child {
+  padding-left: 0;
+}
+
+.kpi:last-child {
+  padding-right: 0;
+}
+
+/* 用一条竖线分隔，而不是三个盒子 */
+.kpi + .kpi {
+  border-left: 1px solid var(--border);
 }
 
 .kpi-k {
@@ -1867,7 +1894,7 @@ strong {
   flex-direction: column;
   gap: 7px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .status-manage-row:last-child {
@@ -1977,19 +2004,31 @@ strong {
 
 .data-stats {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 0;
+  margin-bottom: 16px;
 }
 
 .data-stat {
   flex: 1;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  padding: 9px 10px;
+  background: none;
+  border-radius: 0;
+  padding: 0 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.data-stat:first-child {
+  padding-left: 0;
+}
+
+.data-stat:last-child {
+  padding-right: 0;
+}
+
+.data-stat + .data-stat {
+  border-left: 1px solid var(--border);
 }
 
 .data-stat-k {
@@ -2229,12 +2268,12 @@ strong {
     font-size: 23px;
   }
 
-  .kpi-grid {
-    gap: 7px;
-  }
-
   .kpi-v {
     font-size: 17px;
+  }
+
+  .kpi {
+    padding: 0 8px;
   }
 
   .donut-row {
@@ -2244,5 +2283,36 @@ strong {
 
   .donut-wrap {
     align-self: center;
+  }
+}
+
+/* ---------- 区块节奏（无卡片风格） ---------- */
+/* 放在文件最后：区块之间的留白与分隔线统一在这里给，
+   用来覆盖各区块自身（.card / .current 等）的 padding。 */
+
+.tab-body > * {
+  padding: 22px 0;
+}
+
+.tab-body > * + * {
+  border-top: 1px solid var(--border);
+}
+
+.tab-body > *:first-child {
+  padding-top: 12px;
+}
+
+.tab-body > *:last-child {
+  padding-bottom: 8px;
+}
+
+/* 没有卡片盒子之后，区块标题需要更立得住一点 */
+.card-title {
+  font-size: 15px;
+}
+
+@media (max-width: 380px) {
+  .tab-body > * {
+    padding: 18px 0;
   }
 }

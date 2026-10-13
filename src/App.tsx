@@ -200,6 +200,7 @@ export function App() {
           onDateChange={setDateKey}
           onOpenCalendar={() => setCalendarOpen(true)}
           calendarOpen={calendarOpen}
+          showDateNav={tab === 'today'}
           theme={theme}
           onThemeChange={setTheme}
           saveState={saveState}

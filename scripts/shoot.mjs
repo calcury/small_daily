@@ -332,6 +332,28 @@ async function main() {
   await shoot('01-today', { width: 390, height: 900, full: true })
   await shoot('02-today-bottom', { clickTab: 0 })
   await shoot('03-stats', { clickTab: 2, full: true })
+
+  // KPI / 分段控件也应该是「无卡片」的平铺样式
+  const flatStyle = await evaluate(`({
+    kpiBg: (() => { const el = document.querySelector('.kpi'); return el ? getComputedStyle(el).backgroundColor : null })(),
+    kpiDivider: (() => { const el = document.querySelectorAll('.kpi')[1]; return el ? getComputedStyle(el).borderLeftWidth : null })(),
+    kpiRadius: (() => { const el = document.querySelector('.kpi'); return el ? getComputedStyle(el).borderTopLeftRadius : null })(),
+    segRadius: (() => { const el = document.querySelector('.segmented-item'); return el ? getComputedStyle(el).borderRadius : null })(),
+    segActiveBg: (() => { const el = document.querySelector('.segmented-item.is-active'); return el ? getComputedStyle(el).backgroundColor : null })()
+  })`)
+  console.log('KPI / 分段控件:', JSON.stringify(flatStyle))
+  expect(
+    'KPI 无卡片外观（透明、无圆角）',
+    flatStyle.kpiBg === 'rgba(0, 0, 0, 0)' && flatStyle.kpiRadius === '0px',
+    JSON.stringify(flatStyle)
+  )
+  expect('KPI 之间用竖线分隔', flatStyle.kpiDivider === '1px', String(flatStyle.kpiDivider))
+  expect(
+    '分段控件改下划线式（无圆角、无选中底色）',
+    flatStyle.segRadius === '0px' && flatStyle.segActiveBg === 'rgba(0, 0, 0, 0)',
+    JSON.stringify(flatStyle)
+  )
+
   await shoot('04-settings', { clickTab: 3, full: true })
   await shoot('05-desktop', { clickTab: 0, width: 1024, height: 900 })
 
@@ -354,6 +376,7 @@ async function main() {
     visibleWidthSum: [...document.querySelectorAll('.tl-bar .tl-seg')]
       .reduce((acc, el) => acc + parseFloat(el.style.width || '0'), 0),
     scrollbarWidth: getComputedStyle(document.documentElement).scrollbarWidth,
+    hasDateNav: !!document.querySelector('.datenav'),
     proseLeft: ['.tl-hint', '.field-hint', '.data-note', '.about-list', '.danger-note', '.day-summary-sub']
       .filter(sel => document.querySelector(sel) !== null)
   })`)
@@ -361,6 +384,7 @@ async function main() {
   expect('首页已移除「时段明细」', home.removedSegmentList === 0, String(home.removedSegmentList))
   expect('时间轴仍在', home.hasTimeline)
   expect('时间轴有「添加时段」入口', home.addButtons.includes('添加时段'), home.addButtons.join('/'))
+  expect('「今日」保留顶部日期导航', home.hasDateNav === true)
 
   // 昨天对照条
   expect('时间轴上方有昨日细对照轴', home.yesterdayTag === '昨天' && home.yesterdaySegs > 0,
@@ -438,10 +462,12 @@ async function main() {
     rows: document.querySelectorAll('.plan-edit-row').length,
     statuses: [...document.querySelectorAll('.plan-edit-row .select-input')].map(s => s.value),
     fields: [...document.querySelectorAll('.plan-edit-row .plan-field-label')].map(s => s.textContent.trim()),
-    values: [...document.querySelectorAll('.plan-edit-row .plan-num-input')].map(i => i.value)
+    values: [...document.querySelectorAll('.plan-edit-row .plan-num-input')].map(i => i.value),
+    hasDateNav: !!document.querySelector('.datenav')
   })`)
   console.log('计划页:', JSON.stringify(plansTab))
   expect('计划页列出两条计划', plansTab.rows === 2, String(plansTab.rows))
+  expect('计划页不显示顶部日期', plansTab.hasDateNav === false)
   expect(
     '计划可指定状态 + 每天 / 每周目标',
     plansTab.statuses.join('/') === 'sleep/work' && plansTab.fields.join('/') === '每天/每周/每天/每周',
@@ -841,7 +867,19 @@ async function main() {
     })(),
     hasDemo: [...document.querySelectorAll('button')].some(b => b.textContent.includes('示例数据')),
     builtinTag: [...document.querySelectorAll('.status-manage-list *')].some(el => el.textContent.trim() === '内置'),
-    jsonWord: [...document.querySelectorAll('button')].some(b => /json/i.test(b.textContent))
+    jsonWord: [...document.querySelectorAll('button')].some(b => /json/i.test(b.textContent)),
+    hasDateNav: !!document.querySelector('.datenav'),
+    brandKept: !!document.querySelector('.brand'),
+    sections: [...document.querySelectorAll('.tab-body > *')].map(el => {
+      const s = getComputedStyle(el)
+      return {
+        bg: s.backgroundColor,
+        radius: s.borderTopLeftRadius,
+        shadow: s.boxShadow,
+        top: s.borderTopWidth,
+        sides: s.borderLeftWidth + '/' + s.borderRightWidth + '/' + s.borderBottomWidth
+      }
+    })
   })`)
   console.log('数据面板:', dataPanel)
   expect(
@@ -853,6 +891,26 @@ async function main() {
   expect('按钮文案不出现 json', dataPanel.jsonWord === false)
   expect('已删除「填充示例数据」', dataPanel.hasDemo === false)
   expect('已删除「内置」标签', dataPanel.builtinTag === false)
+
+  // ---------- 设置页不显示顶部日期 + 无卡片风格 ----------
+  expect('设置页不显示顶部日期', dataPanel.hasDateNav === false)
+  expect('设置页仍保留品牌与操作区', dataPanel.brandKept === true)
+  expect(
+    '区块不再是卡片（透明 / 无圆角 / 无阴影）',
+    dataPanel.sections.length > 0 &&
+      dataPanel.sections.every(
+        (s) => s.bg === 'rgba(0, 0, 0, 0)' && s.radius === '0px' && s.shadow === 'none'
+      ),
+    JSON.stringify(dataPanel.sections)
+  )
+  expect(
+    '区块之间只有一条顶部分隔线（不是四边包围的卡片边框）',
+    dataPanel.sections.length > 0 &&
+      dataPanel.sections.every(
+        (s, index) => s.sides === '0px/0px/0px' && s.top === (index === 0 ? '0px' : '1px')
+      ),
+    JSON.stringify(dataPanel.sections.map((s) => `${s.top}|${s.sides}`))
+  )
 
   await cdp.send(
     'Runtime.evaluate',

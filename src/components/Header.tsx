@@ -17,6 +17,8 @@ interface HeaderProps {
   /** 打开日历 */
   onOpenCalendar: () => void
   calendarOpen: boolean
+  /** 是否显示日期导航（只在「今日」有意义，别的标签页不显示） */
+  showDateNav?: boolean
   theme: ThemeMode
   onThemeChange: (theme: ThemeMode) => void
   saveState: SaveState
@@ -35,6 +37,7 @@ export function Header({
   onDateChange,
   onOpenCalendar,
   calendarOpen,
+  showDateNav = true,
   theme,
   onThemeChange,
   saveState,
@@ -62,7 +65,7 @@ export function Header({
             <span className="save-dot" aria-hidden="true" />
             {saveState === 'saved' ? '已保存' : saveState === 'pending' ? '保存中' : '保存异常'}
           </span>
-          {!isToday ? (
+          {showDateNav && !isToday ? (
             <button
               type="button"
               className="mini-btn"
@@ -89,44 +92,46 @@ export function Header({
         </div>
       </div>
 
-      <div className="datenav">
-        <button
-          type="button"
-          className="datenav-arrow"
-          onClick={() => onDateChange(addDays(dateKey, -1))}
-          aria-label="前一天"
-        >
-          <IconChevronLeft size={20} />
-        </button>
+      {showDateNav ? (
+        <div className="datenav">
+          <button
+            type="button"
+            className="datenav-arrow"
+            onClick={() => onDateChange(addDays(dateKey, -1))}
+            aria-label="前一天"
+          >
+            <IconChevronLeft size={20} />
+          </button>
 
-        <button
-          type="button"
-          className="datenav-center"
-          onClick={onOpenCalendar}
-          aria-haspopup="dialog"
-          aria-expanded={calendarOpen}
-          aria-label="打开日历选择日期"
-        >
-          <span className="datenav-main">
-            {monthDayLabel(dateKey)}
-            <span className="datenav-week">{weekdayLabel(dateKey)}</span>
-          </span>
-          <span className="datenav-sub">
-            {isToday ? '今天' : friendlyDate(dateKey, todayKey)}
-            <IconChevronDown size={13} className="datenav-caret" />
-          </span>
-        </button>
+          <button
+            type="button"
+            className="datenav-center"
+            onClick={onOpenCalendar}
+            aria-haspopup="dialog"
+            aria-expanded={calendarOpen}
+            aria-label="打开日历选择日期"
+          >
+            <span className="datenav-main">
+              {monthDayLabel(dateKey)}
+              <span className="datenav-week">{weekdayLabel(dateKey)}</span>
+            </span>
+            <span className="datenav-sub">
+              {isToday ? '今天' : friendlyDate(dateKey, todayKey)}
+              <IconChevronDown size={13} className="datenav-caret" />
+            </span>
+          </button>
 
-        <button
-          type="button"
-          className="datenav-arrow"
-          disabled={!canGoForward}
-          onClick={() => onDateChange(addDays(dateKey, 1))}
-          aria-label="后一天"
-        >
-          <IconChevronRight size={20} />
-        </button>
-      </div>
+          <button
+            type="button"
+            className="datenav-arrow"
+            disabled={!canGoForward}
+            onClick={() => onDateChange(addDays(dateKey, 1))}
+            aria-label="后一天"
+          >
+            <IconChevronRight size={20} />
+          </button>
+        </div>
+      ) : null}
     </header>
   )
 }
