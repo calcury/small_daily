@@ -152,6 +152,13 @@ export const IconCheck = (p: IconProps) => (
   </Base>
 )
 
+export const IconRefresh = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M20 12a8 8 0 1 1-2.4-5.7" />
+    <path d="M20 4.5V10h-5.5" />
+  </Base>
+)
+
 export const IconSpark = (p: IconProps) => (
   <Base {...p}>
     <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />

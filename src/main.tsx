@@ -2,7 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { ScheduleProvider } from './store/ScheduleContext'
+import { stripReloadFlag } from './lib/update'
 import './styles/index.css'
+
+// 「更新版本」是用带 ?v=<时间戳> 的地址重新加载的（为了绕开 HTTP 缓存），
+// 加载完就把这个参数抹掉，免得留在地址栏 / 被收藏出去。
+stripReloadFlag()
 
 const container = document.getElementById('root')
 if (!container) throw new Error('找不到 #root 挂载点')

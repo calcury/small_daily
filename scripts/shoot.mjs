@@ -184,6 +184,11 @@ async function main() {
       problems.push(`log: ${p.entry.text}`)
     }
   })
+  /** 记录每一次顶层导航的 URL（用来断言「更新版本」真的带 ?v= 重新加载了） */
+  const navigations = []
+  cdp.on('Page.frameNavigated', (p) => {
+    if (p?.frame?.url) navigations.push(p.frame.url)
+  })
 
   await cdp.send('Runtime.enable', {}, sessionId)
   await cdp.send('Page.enable', {}, sessionId)
@@ -240,6 +245,17 @@ async function main() {
     )
     if (exceptionDetails) throw new Error(exceptionDetails.text)
     return JSON.parse(result.value)
+  }
+
+  /** 需要 await 的表达式（比如 caches.keys()） */
+  async function evaluateAsync(expression) {
+    const { result, exceptionDetails } = await cdp.send(
+      'Runtime.evaluate',
+      { expression: `(async () => (${expression}))()`, awaitPromise: true, returnByValue: true },
+      sessionId
+    )
+    if (exceptionDetails) throw new Error(exceptionDetails.text)
+    return result.value
   }
 
   async function shoot(name, { clickTab, width, height, full } = {}) {
@@ -779,6 +795,101 @@ async function main() {
     { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
     sessionId
   )
+
+  // ---------- 版本：释放资源重新 fetch，但不动缓存数据 ----------
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelectorAll('.tabbar-item')[2].click(); 'ok'` },
+    sessionId
+  )
+  await wait(450)
+  const versionPanel = await evaluate(`({
+    hasCard: [...document.querySelectorAll('.version-card .card-title')].some(h => h.textContent.trim() === '版本'),
+    buildHint: document.querySelector('.version-card .card-hint')?.textContent?.trim() ?? null,
+    button: document.querySelector('.version-card .btn')?.textContent?.trim() ?? null,
+    hasIcon: !!document.querySelector('.version-card .btn svg')
+  })`)
+  console.log('版本面板:', versionPanel)
+  expect('设置里有「版本」板块', versionPanel.hasCard)
+  expect(
+    '显示当前构建时间',
+    /构建于 \d+\/\d+ \d{2}:\d{2}/.test(versionPanel.buildHint ?? ''),
+    String(versionPanel.buildHint)
+  )
+  expect('有「更新版本」按钮', versionPanel.button === '更新版本', String(versionPanel.button))
+  expect('更新按钮带刷新图标', versionPanel.hasIcon)
+  await shoot('14-version', { full: true })
+
+  // 放一个「别人家的缓存」，验证我们只清自己的
+  await evaluateAsync(
+    `(await caches.open('unrelated-decoy')).put('/decoy', new Response('decoy')).then(() => true)`
+  )
+  const beforeUpdate = await evaluateAsync(`({
+    caches: (await caches.keys()).length,
+    days: Object.keys(JSON.parse(localStorage.getItem('small-daily:data:v1')).days).length,
+    search: location.search
+  })`)
+  console.log('更新前:', beforeUpdate)
+  expect('更新前已有外壳缓存（SW 生效）', beforeUpdate.caches > 0, String(beforeUpdate.caches))
+
+  const navMark = navigations.length
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('button')].find(b => b.textContent.includes('更新版本'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+
+  const reloadedAfterUpdate = cdp.once('Page.loadEventFired')
+  await reloadedAfterUpdate
+  await wait(1200)
+
+  const navAfter = navigations.slice(navMark)
+  console.log('更新时的导航:', navAfter)
+  expect(
+    '更新时带缓存击穿参数重新加载',
+    navAfter.some((u) => /[?&]v=\d+/.test(u)),
+    navAfter.join(' | ')
+  )
+
+  const afterUpdate = await evaluateAsync(`({
+    hasTimeline: !!document.querySelector('.tl-bar'),
+    days: Object.keys(JSON.parse(localStorage.getItem('small-daily:data:v1')).days).length,
+    tail: (() => {
+      const raw = JSON.parse(localStorage.getItem('small-daily:data:v1'))
+      const segs = raw.days['${TODAY_KEY}'].segments
+      const last = segs[segs.length - 1]
+      return { start: last.start, end: last.end, statusId: last.statusId }
+    })(),
+    search: location.search,
+    decoySurvived: (await caches.keys()).includes('unrelated-decoy')
+  })`)
+  console.log('更新后:', afterUpdate)
+  expect('更新后页面正常渲染', afterUpdate.hasTimeline)
+  expect(
+    '更新不会动记录（天数不变）',
+    afterUpdate.days === beforeUpdate.days,
+    `${beforeUpdate.days} → ${afterUpdate.days}`
+  )
+  expect(
+    '更新后「睡觉」记录仍在',
+    afterUpdate.tail.statusId === 'sleep' && afterUpdate.tail.end === 1440,
+    JSON.stringify(afterUpdate.tail)
+  )
+  expect('只清自己的缓存，不碰别的缓存', afterUpdate.decoySurvived)
+  expect('更新后地址栏的 ?v= 已被清掉', afterUpdate.search === '', JSON.stringify(afterUpdate.search))
+
+  // 外壳缓存已被清空 → SW 重新注册后会再建回来
+  let swBack = false
+  for (let i = 0; i < 15; i += 1) {
+    swBack = await evaluateAsync(`!!(await navigator.serviceWorker.getRegistration())?.active`)
+    if (swBack) break
+    await wait(300)
+  }
+  console.log('更新后 SW 重新就绪:', swBack)
+  expect('Service Worker 重新注册并激活', swBack)
+  await shoot('15-after-update', { width: 390, height: 900, full: true })
 
   ws.close()
   chrome.kill()

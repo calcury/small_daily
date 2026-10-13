@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { ThemeMode } from '../types'
 import { useSchedule } from '../store/ScheduleContext'
 import { DataPanel } from './DataPanel'
+import { VersionPanel } from './VersionPanel'
 import { Segmented } from './Sheet'
 import { StatusManager } from './StatusManager'
 import { IconMonitor, IconMoon, IconSun } from './icons'
@@ -72,6 +73,8 @@ export function SettingsTab() {
         onNotify={notify}
         onReset={resetData}
       />
+
+      <VersionPanel onNotify={notify} />
     </div>
   )
 }

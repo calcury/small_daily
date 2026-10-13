@@ -6,6 +6,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => ({
   base: mode === 'production' ? '/small_daily/' : '/',
   plugins: [react()],
+  // 构建时刻，用于「设置 → 版本」里显示当前跑的是哪一版
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   server: {
     port: 5173,
   },
