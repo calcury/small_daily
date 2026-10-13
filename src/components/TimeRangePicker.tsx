@@ -11,7 +11,7 @@ const GRAB_RADIUS = 22
 const RULER_HOURS = [0, 6, 12, 18, 24]
 const GRID_HOURS = [3, 6, 9, 12, 15, 18, 21]
 
-type DragMode = 'start' | 'end' | 'move'
+type DragLine = 'start' | 'end'
 
 interface TimeRangePickerProps {
   /** 当天全部区段，用于画背景 */
@@ -34,7 +34,6 @@ interface TimeRangePickerProps {
  * 可直接拖动的时间范围选择器
  *
  *  - 两条分界线可以左右滑动，拖动时吸附到 5 分钟
- *  - 中间整块可以整体平移
  *  - 背景用和正常一致的颜色画出当天的其它时段，方便知道会盖住谁
  *
  * 命中判定放在画布上统一做（「离哪条线更近就拖哪条」），
@@ -53,14 +52,8 @@ export function TimeRangePicker({
   onChange,
 }: TimeRangePickerProps) {
   const trackRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<{
-    mode: DragMode
-    pointerId: number
-    originMinute: number
-    baseStart: number
-    baseEnd: number
-  } | null>(null)
-  const [dragging, setDragging] = useState<DragMode | null>(null)
+  const dragRef = useRef<{ line: DragLine; pointerId: number } | null>(null)
+  const [dragging, setDragging] = useState<DragLine | null>(null)
 
   const pct = (minute: number) => `${(minute / DAY_MINUTES) * 100}%`
 
@@ -74,19 +67,12 @@ export function TimeRangePicker({
     if (rect.width <= 0) return
 
     const toPx = (minute: number) => rect.left + (minute / DAY_MINUTES) * rect.width
-    const startX = toPx(start)
-    const endX = toPx(end)
-    const distStart = Math.abs(event.clientX - startX)
-    const distEnd = Math.abs(event.clientX - endX)
+    const distStart = Math.abs(event.clientX - toPx(start))
+    const distEnd = Math.abs(event.clientX - toPx(end))
 
-    let mode: DragMode | null = null
-    if (distStart <= GRAB_RADIUS || distEnd <= GRAB_RADIUS) {
-      // 两条线离得很近时，谁更近就拖谁
-      mode = distStart <= distEnd ? 'start' : 'end'
-    } else if (event.clientX > startX && event.clientX < endX) {
-      mode = 'move'
-    }
-    if (!mode) return
+    // 两条线离得很近时，谁更近就拖谁；离两条线都远则不响应
+    if (distStart > GRAB_RADIUS && distEnd > GRAB_RADIUS) return
+    const line: DragLine = distStart <= distEnd ? 'start' : 'end'
 
     event.preventDefault()
     try {
@@ -94,14 +80,8 @@ export function TimeRangePicker({
     } catch {
       /* 某些浏览器可能不支持，忽略即可 */
     }
-    dragRef.current = {
-      mode,
-      pointerId: event.pointerId,
-      originMinute: ((event.clientX - rect.left) / rect.width) * DAY_MINUTES,
-      baseStart: start,
-      baseEnd: end,
-    }
-    setDragging(mode)
+    dragRef.current = { line, pointerId: event.pointerId }
+    setDragging(line)
   }
 
   const onDragMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -112,24 +92,15 @@ export function TimeRangePicker({
     if (rect.width <= 0) return
     event.preventDefault()
 
-    const raw = ((event.clientX - rect.left) / rect.width) * DAY_MINUTES
+    const raw = snap(((event.clientX - rect.left) / rect.width) * DAY_MINUTES)
 
-    if (drag.mode === 'start') {
-      const next = Math.min(snap(raw), end - SNAP)
+    if (drag.line === 'start') {
+      const next = Math.min(raw, end - SNAP)
       if (next !== start) onChange({ start: next, end })
-      return
-    }
-
-    if (drag.mode === 'end') {
-      const next = Math.max(snap(raw), start + SNAP)
+    } else {
+      const next = Math.max(raw, start + SNAP)
       if (next !== end) onChange({ start, end: next })
-      return
     }
-
-    const duration = drag.baseEnd - drag.baseStart
-    const shifted = Math.round((drag.baseStart + (raw - drag.originMinute)) / SNAP) * SNAP
-    const nextStart = Math.max(0, Math.min(DAY_MINUTES - duration, shifted))
-    if (nextStart !== start) onChange({ start: nextStart, end: nextStart + duration })
   }
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -140,12 +111,12 @@ export function TimeRangePicker({
   }
 
   /** 分界线支持键盘微调 */
-  const onHandleKeyDown = (mode: 'start' | 'end') => (event: ReactKeyboardEvent<HTMLElement>) => {
+  const onHandleKeyDown = (line: DragLine) => (event: ReactKeyboardEvent<HTMLElement>) => {
     const step = event.shiftKey ? 15 : SNAP
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
       const delta = event.key === 'ArrowLeft' ? -step : step
-      if (mode === 'start') {
+      if (line === 'start') {
         onChange({ start: Math.max(0, Math.min(end - SNAP, start + delta)), end })
       } else {
         onChange({ start, end: Math.min(DAY_MINUTES, Math.max(start + SNAP, end + delta)) })
@@ -212,7 +183,7 @@ export function TimeRangePicker({
             ) : null}
           </div>
 
-          {/* 选中区间：整块可以拖动平移 */}
+          {/* 选中的区间：纯视觉，拖动只认两条分界线 */}
           <div
             className={`rtp-selected${activeIsNone ? ' is-none' : ''}`}
             style={{
@@ -220,10 +191,8 @@ export function TimeRangePicker({
               width: pct(Math.max(0, end - start)),
               background: activeIsNone ? undefined : activeColor,
             }}
-            title="按住中间可以整段平移"
-          >
-            <span className="rtp-selected-grip" aria-hidden="true" />
-          </div>
+            aria-hidden="true"
+          />
 
           {/* 两条分界线（纯视觉，命中判定在画布上做） */}
           <span

@@ -299,6 +299,38 @@ async function main() {
   )
   await shoot('05b-editor-none')
 
+  // ---------- 回归：编辑器已去掉「设为无」按钮与「整块平移」 ----------
+  const footerButtons = await evaluate(
+    `[...document.querySelectorAll('.sheet-actions .btn')].map(b => b.textContent.trim())`
+  )
+  console.log('编辑器底部按钮:', footerButtons)
+  expect(
+    '底部只剩「取消 / 保存」，没有多余的「设为无」',
+    footerButtons.length === 2 &&
+      footerButtons.includes('取消') &&
+      footerButtons.includes('保存'),
+    footerButtons.join(' / ')
+  )
+
+  // 这段「空」有 6 小时宽，正中间离两条分界线都超过抓取半径：
+  // 从中间拖必须纹丝不动（平移功能已删除）
+  const midBefore = await evaluate(
+    `document.querySelector('.rtp-readout-time')?.textContent ?? null`
+  )
+  const midPoint = await evaluate(`(() => {
+    const r = document.querySelector('.rtp-selected').getBoundingClientRect()
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
+  })()`)
+  await mouse('mousePressed', midPoint.x, midPoint.y)
+  for (const dx of [-30, -60, -95]) await mouse('mouseMoved', midPoint.x + dx, midPoint.y)
+  await mouse('mouseReleased', midPoint.x - 95, midPoint.y)
+  await wait(300)
+  const midAfter = await evaluate(
+    `document.querySelector('.rtp-readout-time')?.textContent ?? null`
+  )
+  console.log('从区间正中间拖动:', midBefore, '→', midAfter)
+  expect('中间拖动不再平移时间范围', midAfter === midBefore, `${midBefore} → ${midAfter}`)
+
   // 关掉，继续后面的拖拽用例
   await cdp.send(
     'Runtime.evaluate',

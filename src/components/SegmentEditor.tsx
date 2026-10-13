@@ -124,23 +124,6 @@ export function SegmentEditor({
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             取消
           </button>
-          {editing && editing.statusId !== NONE_STATUS_ID ? (
-            <button
-              type="button"
-              className="btn btn--soft-warn"
-              onClick={() => {
-                onSave({
-                  original: { start: editing.start, end: editing.end },
-                  start: editing.start,
-                  end: editing.end,
-                  statusId: NONE_STATUS_ID,
-                })
-                onClose()
-              }}
-            >
-              设为「无」
-            </button>
-          ) : null}
           <button
             type="button"
             className="btn btn--primary"
