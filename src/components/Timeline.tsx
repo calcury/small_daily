@@ -155,7 +155,11 @@ export function Timeline({
           })}
         </div>
 
-        <p className="tl-hint">点一下任意位置就能改那一段</p>
+        <p className="tl-hint">
+          {nowMinute === null
+            ? '点一下任意位置就能改那一段'
+            : '点一下任意位置就能改那一段；斜纹部分还没到，不能改'}
+        </p>
       </div>
     </section>
   )

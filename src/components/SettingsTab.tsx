@@ -95,7 +95,8 @@ export function SettingsTab() {
             <b>怎么改历史</b>
             <span>
               点时间轴上的任意一段就能打开编辑器，拖动两侧的分界线改开始 / 结束时间，或者换成别的状态；彩色改回「
-              {statuses.find((s) => s.id === NONE_STATUS_ID)?.name ?? '无'}」也一样。
+              {statuses.find((s) => s.id === NONE_STATUS_ID)?.name ?? '无'}」也一样。今天只能改到「此刻」，画斜纹
+              的部分还没到；昨天以及更早则整天都能改。
             </span>
           </li>
         </ul>

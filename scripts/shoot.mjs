@@ -30,23 +30,35 @@ const rawDemoJson = execSync(`node "${demoBundle}"`, { cwd: ROOT, maxBuffer: 32 
   .trim()
 rmSync(demoBundle, { force: true })
 
-// 给「今天」换上一份可预期的作息，其中特意留出大段「空」，用来验证
-// 「点空 = 整段选中，而不是切一个短事件出来」。
+// 给「今天」换上一份可预期的作息，其中特意留出大段「空」，用来验证：
+//   · 点「空」= 整段选中，而不是切一个短事件出来
+//   · 今天只能改到「此刻」，斜纹部分（未来）不可编辑
+//
+// 「此刻」被固定成今天 19:25（见下面的 Date mock），所以断言都是确定的。
 const demoData = JSON.parse(rawDemoJson)
 const nowDate = new Date()
 const pad2 = (n) => String(n).padStart(2, '0')
 const TODAY_KEY = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(
   nowDate.getDate()
 )}`
+const NOW_MINUTE = 19 * 60 + 25 // 19:25
+const FIXED_MS = new Date(
+  nowDate.getFullYear(),
+  nowDate.getMonth(),
+  nowDate.getDate(),
+  Math.floor(NOW_MINUTE / 60),
+  NOW_MINUTE % 60,
+  0
+).getTime()
 demoData.days[TODAY_KEY] = {
   date: TODAY_KEY,
   segments: [
     { id: 'fx-sleep', start: 0, end: 4 * 60, statusId: 'sleep' },
-    { id: 'fx-gap-am', start: 4 * 60, end: 9 * 60, statusId: 'none' },
+    { id: 'fx-gap-am', start: 4 * 60, end: 9 * 60, statusId: 'none' }, // 全在过去
     { id: 'fx-work', start: 9 * 60, end: 12 * 60, statusId: 'work' },
     { id: 'fx-rest', start: 12 * 60, end: 13 * 60, statusId: 'rest' },
-    { id: 'fx-study', start: 13 * 60, end: 18 * 60, statusId: 'study' },
-    { id: 'fx-gap-pm', start: 18 * 60, end: 24 * 60, statusId: 'none' },
+    { id: 'fx-gap-pm', start: 13 * 60, end: 20 * 60, statusId: 'none' }, // 横跨 19:25
+    { id: 'fx-future', start: 20 * 60, end: 24 * 60, statusId: 'work' }, // 全在未来
   ],
   updatedAt: Date.now(),
 }
@@ -170,11 +182,25 @@ async function main() {
 
   await setViewport(390, 900)
 
-  // 在每个新文档执行前注入示例数据
+  // 在每个新文档执行前：固定「此刻」+ 注入示例数据
   await cdp.send(
     'Page.addScriptToEvaluateOnNewDocument',
     {
-      source: `try { localStorage.setItem('small-daily:data:v1', ${JSON.stringify(demoJson)}) } catch (e) {}`,
+      source: `
+        (() => {
+          const Real = Date
+          const fixed = ${FIXED_MS}
+          function MockDate(...args) {
+            return args.length === 0 ? new Real(fixed) : new Real(...args)
+          }
+          MockDate.now = () => fixed
+          MockDate.parse = Real.parse
+          MockDate.UTC = Real.UTC
+          MockDate.prototype = Real.prototype
+          window.Date = MockDate
+        })()
+        try { localStorage.setItem('small-daily:data:v1', ${JSON.stringify(demoJson)}) } catch (e) {}
+      `,
     },
     sessionId
   )
@@ -257,66 +283,62 @@ async function main() {
   expect('时间轴仍在', home.hasTimeline)
   expect('时间轴有「添加时段」入口', home.addButtons.includes('添加时段'), home.addButtons.join('/'))
 
-  // ---------- 点「空」：应整段选中，不切短事件 ----------
-  const gapProbe = await evaluate(`(() => {
-    const segs = [...document.querySelectorAll('.tl-seg.is-none')]
-    if (!segs.length) return null
-    const el = segs.reduce((a, b) =>
-      parseFloat(b.style.width) > parseFloat(a.style.width) ? b : a
+  // ---------- 小工具 ----------
+  /** 按时间轴上的百分比位置点一下 */
+  const clickTimelineAt = async (ratio) => {
+    const p = await evaluate(`(() => {
+      const r = document.querySelector('.tl-bar').getBoundingClientRect()
+      return { x: Math.round(r.left + r.width * ${ratio}), y: Math.round(r.top + r.height / 2) }
+    })()`)
+    await mouse('mousePressed', p.x, p.y)
+    await mouse('mouseReleased', p.x, p.y)
+    await wait(600)
+  }
+  const readEditor = () =>
+    evaluate(`({
+      sheetOpen: !!document.querySelector('.sheet'),
+      title: document.querySelector('.sheet-title')?.textContent ?? null,
+      activeChip: document.querySelector('.status-chip.is-active')?.textContent?.trim() ?? null,
+      range: (() => {
+        const bs = document.querySelectorAll('.rtp-readout-time b')
+        return { start: bs[0]?.textContent ?? null, end: bs[1]?.textContent ?? null }
+      })(),
+      selectedPct: parseFloat(document.querySelector('.rtp-selected')?.style.width ?? '0'),
+      locked: !!document.querySelector('.rtp-locked'),
+      footer: [...document.querySelectorAll('.sheet-actions .btn')].map(b => b.textContent.trim())
+    })`)
+  const closeEditor = async () => {
+    await cdp.send(
+      'Runtime.evaluate',
+      {
+        expression: `[...document.querySelectorAll('.sheet-actions .btn')].find(b => b.textContent.includes('取消'))?.click(); 'ok'`,
+      },
+      sessionId
     )
-    const r = el.getBoundingClientRect()
-    return {
-      widthPct: parseFloat(el.style.width),
-      title: el.title,
-      x: Math.round(r.left + r.width / 2),
-      y: Math.round(r.top + r.height / 2)
-    }
-  })()`)
-  console.log('最大的「空」段:', gapProbe)
-  expect('时间轴上存在「空」段', Boolean(gapProbe))
+    await wait(400)
+  }
 
-  await mouse('mousePressed', gapProbe.x, gapProbe.y)
-  await mouse('mouseReleased', gapProbe.x, gapProbe.y)
-  await wait(600)
-
-  const gapEditor = await evaluate(`({
-    sheetOpen: !!document.querySelector('.sheet'),
-    title: document.querySelector('.sheet-title')?.textContent ?? null,
-    activeChip: document.querySelector('.status-chip.is-active')?.textContent?.trim() ?? null,
-    range: (() => {
-      const bs = document.querySelectorAll('.rtp-readout-time b')
-      return { start: bs[0]?.textContent ?? null, end: bs[1]?.textContent ?? null }
-    })(),
-    selectedPct: parseFloat(document.querySelector('.rtp-selected')?.style.width ?? '0')
-  })`)
-  console.log('点「空」后:', gapEditor)
-  expect('点「空」也能打开编辑器', gapEditor.sheetOpen)
-  expect('「空」被当作事件选中', /无/.test(gapEditor.activeChip ?? ''), String(gapEditor.activeChip))
+  // ---------- A. 过去的「空」：整段选中，且不切短事件 ----------
+  // 04:00–09:00 是空的，点 06:30（27%）
+  await clickTimelineAt(0.27)
+  const pastGap = await readEditor()
+  console.log('A 点过去的大段「空」(06:30):', pastGap.range, `${pastGap.selectedPct}%`)
+  expect('点「空」也能打开编辑器', pastGap.sheetOpen)
+  expect('「空」被当作事件选中', /无/.test(pastGap.activeChip ?? ''), String(pastGap.activeChip))
   expect(
-    '选中的就是整段「空」，没有被切成 1 小时',
-    Math.abs(gapEditor.selectedPct - gapProbe.widthPct) < 1,
-    `段宽 ${gapProbe.widthPct}% vs 选中 ${gapEditor.selectedPct}%`
+    '过去的「空」整段选中，没有被切成 1 小时',
+    pastGap.range.start === '04:00' && pastGap.range.end === '09:00',
+    JSON.stringify(pastGap.range)
+  )
+  expect(
+    '底部只剩「取消 / 保存」，没有多余的「设为无」',
+    pastGap.footer.join(' / ') === '取消 / 保存',
+    pastGap.footer.join(' / ')
   )
   await shoot('05b-editor-none')
 
-  // ---------- 回归：编辑器已去掉「设为无」按钮与「整块平移」 ----------
-  const footerButtons = await evaluate(
-    `[...document.querySelectorAll('.sheet-actions .btn')].map(b => b.textContent.trim())`
-  )
-  console.log('编辑器底部按钮:', footerButtons)
-  expect(
-    '底部只剩「取消 / 保存」，没有多余的「设为无」',
-    footerButtons.length === 2 &&
-      footerButtons.includes('取消') &&
-      footerButtons.includes('保存'),
-    footerButtons.join(' / ')
-  )
-
-  // 这段「空」有 6 小时宽，正中间离两条分界线都超过抓取半径：
-  // 从中间拖必须纹丝不动（平移功能已删除）
-  const midBefore = await evaluate(
-    `document.querySelector('.rtp-readout-time')?.textContent ?? null`
-  )
+  // 5 小时宽的段，正中间离两条线都超过抓取半径：从中间拖必须纹丝不动（已删除平移）
+  const midBefore = pastGap.range
   const midPoint = await evaluate(`(() => {
     const r = document.querySelector('.rtp-selected').getBoundingClientRect()
     return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
@@ -325,21 +347,56 @@ async function main() {
   for (const dx of [-30, -60, -95]) await mouse('mouseMoved', midPoint.x + dx, midPoint.y)
   await mouse('mouseReleased', midPoint.x - 95, midPoint.y)
   await wait(300)
-  const midAfter = await evaluate(
-    `document.querySelector('.rtp-readout-time')?.textContent ?? null`
+  const midAfter = await readEditor()
+  console.log('从区间正中间拖动:', midBefore, '→', midAfter.range)
+  expect(
+    '中间拖动不再平移时间范围',
+    midAfter.range.start === midBefore.start && midAfter.range.end === midBefore.end,
+    `${JSON.stringify(midBefore)} → ${JSON.stringify(midAfter.range)}`
   )
-  console.log('从区间正中间拖动:', midBefore, '→', midAfter)
-  expect('中间拖动不再平移时间范围', midAfter === midBefore, `${midBefore} → ${midAfter}`)
+  await closeEditor()
 
-  // 关掉，继续后面的拖拽用例
-  await cdp.send(
-    'Runtime.evaluate',
-    {
-      expression: `[...document.querySelectorAll('.sheet-actions .btn')].find(b => b.textContent.includes('取消'))?.click(); 'ok'`,
-    },
-    sessionId
+  // ---------- B. 横跨「此刻」的「空」：右边界卡在 19:25 ----------
+  // 13:00–20:00 横跨此刻，点 15:00（62.5%）
+  await clickTimelineAt(0.625)
+  const crossGap = await readEditor()
+  console.log('B 点横跨此刻的「空」(15:00):', crossGap.range)
+  expect('横跨此刻的段也能打开', crossGap.sheetOpen)
+  expect(
+    '结束时间被卡在「此刻」19:25，而不是 24:00',
+    crossGap.range.start === '13:00' && crossGap.range.end === '19:25',
+    JSON.stringify(crossGap.range)
   )
-  await wait(400)
+  expect('未来的部分画出了斜纹', crossGap.locked)
+  await shoot('05c-editor-now-limit')
+
+  // 右分界线往未来拖，也过不去
+  const endHandle = await evaluate(`(() => {
+    const r = document.querySelector('.rtp-handle--end').getBoundingClientRect()
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
+  })()`)
+  await mouse('mousePressed', endHandle.x, endHandle.y)
+  for (const dx of [20, 50, 90, 130]) await mouse('mouseMoved', endHandle.x + dx, endHandle.y)
+  await mouse('mouseReleased', endHandle.x + 130, endHandle.y)
+  await wait(300)
+  const crossAfter = await readEditor()
+  console.log('B 把右分界线往未来拖:', crossAfter.range)
+  expect(
+    '拖右分界线也翻不过「此刻」',
+    crossAfter.range.end === '19:25',
+    JSON.stringify(crossAfter.range)
+  )
+  await closeEditor()
+
+  // ---------- C. 完全在未来的段：不接受编辑 ----------
+  // 20:00–24:00 全在未来，点 21:00（87.5%）
+  await clickTimelineAt(0.875)
+  const futureTry = await readEditor()
+  const blockedToast = await evaluate(`document.querySelector('.toast')?.textContent ?? null`)
+  console.log('C 点未来的段(21:00):', { sheetOpen: futureTry.sheetOpen, toast: blockedToast })
+  expect('点完全在未来的段不会打开编辑器', futureTry.sheetOpen === false)
+  expect('给出「还没到」的提示', /还没到/.test(blockedToast ?? ''), String(blockedToast))
+  await shoot('05d-future-blocked')
 
   // ---------- 点选时间轴 → 打开带拖动分界线的编辑器 ----------
   const barPoint = await evaluate(`(() => {

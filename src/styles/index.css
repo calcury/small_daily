@@ -1507,6 +1507,27 @@ strong {
   opacity: 0.75;
 }
 
+/* 「此刻」之后的部分：还没到，不能编辑 */
+.rtp-locked {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.5) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+:root[data-theme='dark'] .rtp-locked {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.4) 0 2px,
+    transparent 2px 6px
+  );
+}
+
 /* 选中的区间：纯视觉，不接收指针事件（拖动只认两条分界线） */
 .rtp-selected {
   position: absolute;

@@ -34,6 +34,7 @@ interface TimeRangePickerProps {
  * 可直接拖动的时间范围选择器
  *
  *  - 两条分界线可以左右滑动，拖动时吸附到 5 分钟
+ *  - 今天只能改到「此刻」为止（之后的部分画成斜纹，拖不过去）；历史日期整天都能改
  *  - 背景用和正常一致的颜色画出当天的其它时段，方便知道会盖住谁
  *
  * 命中判定放在画布上统一做（「离哪条线更近就拖哪条」），
@@ -56,6 +57,9 @@ export function TimeRangePicker({
   const [dragging, setDragging] = useState<DragLine | null>(null)
 
   const pct = (minute: number) => `${(minute / DAY_MINUTES) * 100}%`
+
+  /** 可编辑的最晚时间：今天卡在「此刻」，历史日期整天都能改 */
+  const maxMinute = nowMinute ?? DAY_MINUTES
 
   const snap = (minute: number) =>
     Math.max(0, Math.min(DAY_MINUTES, Math.round(minute / SNAP) * SNAP))
@@ -98,7 +102,8 @@ export function TimeRangePicker({
       const next = Math.min(raw, end - SNAP)
       if (next !== start) onChange({ start: next, end })
     } else {
-      const next = Math.max(raw, start + SNAP)
+      // 结束时间不能越过「此刻」
+      const next = Math.min(Math.max(raw, start + SNAP), maxMinute)
       if (next !== end) onChange({ start, end: next })
     }
   }
@@ -119,7 +124,7 @@ export function TimeRangePicker({
       if (line === 'start') {
         onChange({ start: Math.max(0, Math.min(end - SNAP, start + delta)), end })
       } else {
-        onChange({ start, end: Math.min(DAY_MINUTES, Math.max(start + SNAP, end + delta)) })
+        onChange({ start, end: Math.min(maxMinute, Math.max(start + SNAP, end + delta)) })
       }
     }
   }
@@ -180,6 +185,10 @@ export function TimeRangePicker({
             ))}
             {nowMinute !== null ? (
               <span className="rtp-now" style={{ left: pct(nowMinute) }} />
+            ) : null}
+            {/* 「此刻」之后：还不能记录 */}
+            {maxMinute < DAY_MINUTES ? (
+              <span className="rtp-locked" style={{ left: pct(maxMinute) }} />
             ) : null}
           </div>
 

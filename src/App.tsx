@@ -74,6 +74,13 @@ export function App() {
   const isToday = dateKey === todayKey
   const segments = getSegments(dateKey)
   const compareKey = addDays(dateKey, -1)
+  /**
+   * 可编辑的最晚时间：
+   *  - 今天 → 卡在「此刻」，不能记录还没发生的时间
+   *  - 昨天及更早 → 整天都能改
+   *  - 明天及以后 → 根本浏览不过去（见上面的 dateKey 夹取 + Header 的导航限制）
+   */
+  const editLimit = isToday ? currentMinute : DAY_MINUTES
 
   const stats = useMemo(
     () => dayStat(data, dateKey, todayKey, currentMinute),
@@ -106,40 +113,42 @@ export function App() {
   )
 
   /**
-   * 点选时间轴上的某一处：直接把这一整段作为被选中事件打开。
-   * 无论是彩色时段还是灰色的「空」，行为完全一致 —— 一样能拖分界线改长度、改状态。
+   * 点选时间轴上的某一处：把这一段作为被选中事件打开（今天截到此刻为止）。
+   * 彩色时段和灰色的「空」行为完全一致 —— 一样能拖分界线改长度、改状态。
    */
   const openEditorAt = (segment: Segment) => {
+    const end = Math.min(segment.end, editLimit)
+    if (end <= segment.start) {
+      notify('还没到的时间不能编辑')
+      return
+    }
     setSelectedId(segment.id)
-    setEditing(segment)
-    setEditorInitial({
-      start: segment.start,
-      end: segment.end,
-      statusId: segment.statusId,
-    })
+    // original 是从 editing 取的，所以这里必须用截断后的区间，
+    // 否则保存时会把「此刻」之后的部分也一并清掉
+    setEditing({ ...segment, end })
+    setEditorInitial({ start: segment.start, end, statusId: segment.statusId })
     setEditorOpen(true)
   }
 
-  /** 手动添加：落在最大的空白时段里 */
+  /** 手动添加：落在最大的空白时段里（今天的上限是此刻） */
   const openCreate = () => {
-    const gaps = [...segments]
-      .filter((s) => s.statusId === NONE_STATUS_ID)
-      .sort((a, b) => b.end - b.start - (a.end - a.start))
-    const gap = gaps[0]
-
-    let start: number
-    let end: number
-
-    if (gap && gap.end - gap.start >= 15) {
-      start = floorTo(gap.start, SNAP)
-      end = Math.min(gap.end, start + 60)
-    } else if (isToday) {
-      start = Math.min(floorTo(currentMinute, SNAP), DAY_MINUTES - 15)
-      end = Math.min(DAY_MINUTES, start + 60)
-    } else {
-      start = 9 * 60
-      end = 10 * 60
+    if (editLimit < SNAP) {
+      notify('今天还没有可以记录的时间')
+      return
     }
+
+    const gap = segments
+      .filter((s) => s.statusId === NONE_STATUS_ID && s.start < editLimit)
+      .map((s) => ({ start: s.start, end: Math.min(s.end, editLimit) }))
+      .filter((g) => g.end - g.start >= 15)
+      .sort((a, b) => b.end - b.start - (a.end - a.start))[0]
+
+    const start = gap
+      ? floorTo(gap.start, SNAP)
+      : isToday
+        ? Math.max(0, editLimit - 60)
+        : 9 * 60
+    const end = gap ? Math.min(gap.end, start + 60) : isToday ? editLimit : 10 * 60
 
     setSelectedId(null)
     setEditing(null)

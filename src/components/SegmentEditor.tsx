@@ -68,6 +68,8 @@ export function SegmentEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing])
 
+  /** 可编辑的最晚时间：今天卡在「此刻」，历史日期整天都能改 */
+  const maxMinute = nowMinute ?? DAY_MINUTES
   const invalid = end <= start
   const endAtMidnight = end >= DAY_MINUTES
   const activeIsNone = statusId === NONE_STATUS_ID
@@ -80,7 +82,7 @@ export function SegmentEditor({
     if (which === 'start') {
       setStart((prev) => clampMinute(Math.min(prev + delta, end - SNAP)))
     } else {
-      setEnd((prev) => clampMinute(Math.max(prev + delta, start + SNAP)))
+      setEnd((prev) => Math.min(maxMinute, clampMinute(Math.max(prev + delta, start + SNAP))))
     }
   }
 
@@ -117,7 +119,11 @@ export function SegmentEditor({
       open={open}
       tall
       title={editing && editing.statusId !== NONE_STATUS_ID ? '修改时段' : '设置时段'}
-      subtitle="拖动两侧的分界线调整时间，背景是当天的其它时段"
+      subtitle={
+        maxMinute >= DAY_MINUTES
+          ? '拖动两侧的分界线调整时间，背景是当天的其它时段'
+          : '拖动两侧的分界线调整时间；画斜纹的部分还没到，今天只能改到此刻'
+      }
       onClose={onClose}
       footer={
         <div className="sheet-actions">
@@ -201,7 +207,7 @@ export function SegmentEditor({
             value={endAtMidnight ? '23:59' : toInputValue(end)}
             onChange={(event) => {
               const next = fromInputValue(event.target.value)
-              if (next !== null) setEnd(next)
+              if (next !== null) setEnd(Math.min(next, maxMinute))
             }}
           />
           {stepButtons('end')}
@@ -209,24 +215,27 @@ export function SegmentEditor({
             <button
               type="button"
               className="mini-btn"
-              onClick={() => setEnd(clampMinute(Math.max(nowMinute, start + SNAP)))}
+              onClick={() => setEnd(Math.min(maxMinute, clampMinute(Math.max(nowMinute, start + SNAP))))}
             >
               现在
             </button>
           ) : null}
         </div>
 
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={endAtMidnight}
-            onChange={(event) => {
-              if (event.target.checked) setEnd(DAY_MINUTES)
-              else if (end >= DAY_MINUTES) setEnd(DAY_MINUTES - SNAP)
-            }}
-          />
-          结束时间到当天 24:00
-        </label>
+        {/* 历史日期才能拉到当天 24:00；今天最多到「此刻」 */}
+        {maxMinute >= DAY_MINUTES ? (
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={endAtMidnight}
+              onChange={(event) => {
+                if (event.target.checked) setEnd(DAY_MINUTES)
+                else if (end >= DAY_MINUTES) setEnd(DAY_MINUTES - SNAP)
+              }}
+            />
+            结束时间到当天 24:00
+          </label>
+        ) : null}
       </div>
 
       {/* 状态 */}
