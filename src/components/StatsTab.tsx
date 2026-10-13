@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { AppData } from '../types'
 import { NONE_STATUS_ID } from '../types'
 import { useNow } from '../hooks/useNow'
 import { useSchedule } from '../store/ScheduleContext'
@@ -19,6 +20,8 @@ import { TrendChart, type TrendSeries } from './charts/TrendChart'
 import { Segmented } from './Sheet'
 
 interface StatsTabProps {
+  /** 已把「新的一天开局」算进去的一份数据（见 App 的 viewData） */
+  data: AppData
   onOpenDay: (dateKey: string) => void
 }
 
@@ -28,8 +31,8 @@ const RANGE_OPTIONS = [
   { value: 30, label: '近 30 天' },
 ]
 
-export function StatsTab({ onOpenDay }: StatsTabProps) {
-  const { data, statuses, statusMap, noneStatus, trendRange, setTrendRange } = useSchedule()
+export function StatsTab({ data, onOpenDay }: StatsTabProps) {
+  const { statuses, statusMap, noneStatus, trendRange, setTrendRange } = useSchedule()
   const now = useNow(60000)
   const todayKey = toDateKey(now)
   const currentMinute = nowMinutes(now)

@@ -409,7 +409,7 @@ strong {
   height: 14px;
   border-radius: 50%;
   flex: none;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--surface) 70%, transparent);
 }
 
 .current-name {
@@ -2315,4 +2315,22 @@ strong {
   .tab-body > * {
     padding: 18px 0;
   }
+}
+
+/* ---------- 「此刻正在」例外：保留回悬浮卡 ---------- */
+/* 唯一一个不跟扁平节奏走的区块 —— 用更高优先级把它从上面的规则里摘出来，
+   其余区块（时间轴、计划进度……）维持「透明 + 细线分隔」。 */
+
+.tab-body > .card.current {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 16px;
+  margin: 12px 0 6px;
+}
+
+/* 悬浮卡后面不必再叠一条分隔线，「卡片 + 横线」会显得重复 */
+.tab-body > .card.current + * {
+  border-top: none;
 }

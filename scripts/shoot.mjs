@@ -1135,6 +1135,124 @@ async function main() {
   expect('Service Worker 重新注册并激活', swBack)
   await shoot('15-after-update', { width: 390, height: 900, full: true })
 
+  // ---------- 新的一天：开局沿用前一天最后一个事件 ----------
+  // 造一份「昨天有记录、今天还空着」的数据，验证第二天一打开就是延续状态。
+  const probeData = {
+    version: 1,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    statuses: [
+      { id: 'sleep', name: '睡觉', color: '#8b5cf6' },
+      { id: 'work', name: '工作', color: '#3b82f6' },
+      { id: 'none', name: '无', color: '#94a3b8', builtin: true },
+    ],
+    days: {
+      [YESTERDAY_KEY]: {
+        date: YESTERDAY_KEY,
+        // 结尾是「睡觉」，所以第二天开局应当继承「睡觉」
+        segments: [
+          { id: 'p-w', start: 0, end: 18 * 60, statusId: 'work' },
+          { id: 'p-s', start: 18 * 60, end: 24 * 60, statusId: 'sleep' },
+        ],
+        updatedAt: Date.now(),
+      },
+    },
+    plans: [],
+    theme: 'light',
+    trendRange: 7,
+  }
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `localStorage.setItem('small-daily:data:v1', ${JSON.stringify(
+        JSON.stringify(probeData)
+      )}); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(150)
+  const seedReload = cdp.once('Page.loadEventFired')
+  await cdp.send('Page.reload', {}, sessionId)
+  await seedReload
+  await wait(1100)
+
+  const seedView = await evaluate(`(() => {
+    const raw = JSON.parse(localStorage.getItem('small-daily:data:v1') || 'null')
+    const segs = [...document.querySelectorAll('.tl-bar .tl-seg')].map((el) => ({
+      w: parseFloat(el.style.width || '0'),
+      bg: getComputedStyle(el).backgroundColor
+    }))
+    const colored = segs.filter((s) => s.bg !== 'rgba(0, 0, 0, 0)')
+    return {
+      currentName: document.querySelector('.current-name')?.textContent ?? null,
+      range: document.querySelector('.current-range')?.textContent?.trim() ?? null,
+      todayPersisted: !!(raw && raw.days && raw.days['${TODAY_KEY}']),
+      coloredBars: colored.length,
+      coloredWidth: colored[0] ? colored[0].w : 0,
+      totalBars: segs.length
+    }
+  })()`)
+  console.log('第二天开局:', seedView)
+  expect(
+    '第二天「此刻正在」= 前一天最后的事件（睡觉）',
+    seedView.currentName === '睡觉',
+    String(seedView.currentName)
+  )
+  expect(
+    '第二天开局从 0 点延续到此刻（一整段 0 → 19:25）',
+    seedView.coloredBars === 1 &&
+      Math.abs(seedView.coloredWidth - (NOW_MINUTE / 1440) * 100) < 0.1,
+    JSON.stringify({ bars: seedView.coloredBars, w: seedView.coloredWidth })
+  )
+  expect(
+    '延续只是默认值，没编辑就不写盘',
+    seedView.todayPersisted === false,
+    String(seedView.todayPersisted)
+  )
+  await shoot('16-next-day-open', { full: true })
+
+  // 从此刻记录「工作」：延续下来的「睡觉」应当自动成为今天的开局
+  await cdp.send(
+    'Runtime.evaluate',
+    { expression: `document.querySelector('.current-main')?.click(); 'ok'` },
+    sessionId
+  )
+  await wait(400)
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('.picker-item')].find(b => b.textContent.includes('工作'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(600)
+  const seedAfter = await evaluate(`(() => {
+    const raw = JSON.parse(localStorage.getItem('small-daily:data:v1'))
+    const segs = raw.days['${TODAY_KEY}'].segments
+    const first = segs[0]
+    const last = segs[segs.length - 1]
+    return {
+      first: { start: first.start, end: first.end, statusId: first.statusId },
+      last: { start: last.start, end: last.end, statusId: last.statusId }
+    }
+  })()`)
+  console.log('第二天记录后:', seedAfter)
+  expect(
+    '记录后：昨晚的「睡觉」成为今天的开局（0 → 此刻）',
+    seedAfter.first.statusId === 'sleep' &&
+      seedAfter.first.start === 0 &&
+      seedAfter.first.end === NOW_MINUTE,
+    JSON.stringify(seedAfter.first)
+  )
+  expect(
+    '记录后：新事件从此刻接上（此刻 → 24:00）',
+    seedAfter.last.statusId === 'work' &&
+      seedAfter.last.start === NOW_MINUTE &&
+      seedAfter.last.end === 1440,
+    JSON.stringify(seedAfter.last)
+  )
+  await shoot('17-next-day-recorded', { full: true })
+
   ws.close()
   chrome.kill()
 

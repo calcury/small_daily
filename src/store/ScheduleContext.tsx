@@ -19,8 +19,8 @@ import type {
 import { DAY_MINUTES, NONE_STATUS_ID } from '../types'
 import { newId } from '../lib/id'
 import { MAX_DAILY_MINUTES, MAX_WEEKLY_MINUTES, toTargetMinutes } from '../lib/plans'
-import { applyRange, emptyDay, normalize } from '../lib/segments'
-import { nowMinutes } from '../lib/time'
+import { applyRange, emptyDay, lastStatusOf, normalize, seedDay } from '../lib/segments'
+import { addDays, nowMinutes, toDateKey } from '../lib/time'
 import {
   COLOR_PALETTE,
   createEmptyData,
@@ -92,6 +92,19 @@ const EMPTY_SEGMENTS: Segment[] = Object.freeze([
 function pickColor(used: string[]): string {
   const free = COLOR_PALETTE.find((c) => !used.includes(c))
   return free ?? COLOR_PALETTE[used.length % COLOR_PALETTE.length]
+}
+
+/**
+ * 新的一天的「开局」：今天还没有任何记录时，沿用前一天最后一个事件，
+ * 让状态从 0 点延续下来 —— 打开就是「昨晚在做什么，现在还在继续」。
+ * 只对「今天」生效（过去的空白日子不去补，避免误填历史）。
+ */
+function seedBaseFor(data: AppData, dateKey: string): Segment[] | null {
+  if (dateKey !== toDateKey(new Date())) return null
+  const prev = data.days[addDays(dateKey, -1)]?.segments
+  if (!prev) return null
+  const statusId = lastStatusOf(prev)
+  return statusId ? seedDay(statusId) : null
 }
 
 export function ScheduleProvider({ children }: { children: ReactNode }) {
@@ -201,7 +214,8 @@ export function ScheduleProvider({ children }: { children: ReactNode }) {
   const mutateDay = useCallback(
     (dateKey: string, updater: (segments: Segment[]) => Segment[]) => {
       setData((prev) => {
-        const current = prev.days[dateKey]?.segments ?? emptyDay()
+        // 今天还没记录时，先按「前一天最后的事件」铺一个开局，编辑就建立在它之上
+        const current = prev.days[dateKey]?.segments ?? seedBaseFor(prev, dateKey) ?? emptyDay()
         const next = normalize(updater(current))
         const stamp = Date.now()
         return {

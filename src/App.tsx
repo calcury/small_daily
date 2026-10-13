@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { EditPayload, Segment } from './types'
+import type { AppData, EditPayload, Segment } from './types'
 import { DAY_MINUTES, NONE_STATUS_ID } from './types'
 import { useNow } from './hooks/useNow'
 import { useSchedule } from './store/ScheduleContext'
@@ -13,7 +13,7 @@ import {
   toDateKey,
   weekdayLabel,
 } from './lib/time'
-import { clipSegments, segmentAt, trackedMinutes } from './lib/segments'
+import { clipSegments, lastStatusOf, seedDay, segmentAt, trackedMinutes } from './lib/segments'
 import { dayStat, rangeByStatus } from './lib/stats'
 import { Header } from './components/Header'
 import { CalendarSheet } from './components/CalendarSheet'
@@ -79,7 +79,30 @@ export function App() {
   }, [dateKey, todayKey])
 
   const isToday = dateKey === todayKey
-  const segments = getSegments(dateKey)
+
+  /**
+   * 新的一天开局：今天还没有记录时，沿用前一天最后一个事件，让状态从 0 点延续下来。
+   * 只作为展示 / 编辑的默认值，本身不写盘（写盘时由 seedBaseFor 做同样的事）。
+   */
+  const seedSegments = useMemo(() => {
+    if (hasDay(todayKey)) return null
+    const statusId = lastStatusOf(getSegments(addDays(todayKey, -1)))
+    return statusId ? seedDay(statusId) : null
+  }, [hasDay, todayKey, getSegments])
+
+  /** 统计用的一份数据：把「开局」临时看作今天的记录，别让首页进度和卡片对不上 */
+  const viewData = useMemo<AppData>(() => {
+    if (!seedSegments) return data
+    return {
+      ...data,
+      days: {
+        ...data.days,
+        [todayKey]: { date: todayKey, segments: seedSegments, updatedAt: data.updatedAt },
+      },
+    }
+  }, [data, seedSegments, todayKey])
+
+  const segments = isToday && seedSegments ? seedSegments : getSegments(dateKey)
   const compareKey = addDays(dateKey, -1)
   /**
    * 可编辑的最晚时间：
@@ -90,16 +113,16 @@ export function App() {
   const editLimit = isToday ? currentMinute : DAY_MINUTES
 
   const stats = useMemo(
-    () => dayStat(data, dateKey, todayKey, currentMinute),
-    [data, dateKey, todayKey, currentMinute]
+    () => dayStat(viewData, dateKey, todayKey, currentMinute),
+    [viewData, dateKey, todayKey, currentMinute]
   )
   /**
    * 本周（周一起）至今、每个状态累计了多久 —— 用来对照「每周计划」。
    * 选中的若是过去的日期，就统计到那一天为止。
    */
   const weekByStatus = useMemo(
-    () => rangeByStatus(data, startOfWeek(dateKey), dateKey, todayKey, currentMinute),
-    [data, dateKey, todayKey, currentMinute]
+    () => rangeByStatus(viewData, startOfWeek(dateKey), dateKey, todayKey, currentMinute),
+    [viewData, dateKey, todayKey, currentMinute]
   )
 
   const currentSegment = useMemo(
@@ -277,6 +300,7 @@ export function App() {
 
           {tab === 'stats' ? (
             <StatsTab
+              data={viewData}
               onOpenDay={(key) => {
                 setDateKey(key)
                 setTab('today')

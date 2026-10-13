@@ -7,6 +7,27 @@ export function emptyDay(): Segment[] {
   return [{ id: newId('none'), start: 0, end: DAY_MINUTES, statusId: NONE_STATUS_ID }]
 }
 
+/**
+ * 前一天最后一个「有记录」的事件状态 —— 用来给新的一天开局。
+ * 跳过结尾那些「无」，因为那只是没记录，不算一件事。
+ * 全是没有记录时返回 null。
+ */
+export function lastStatusOf(segments: Segment[]): string | null {
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const seg = segments[i]
+    if (seg.statusId !== NONE_STATUS_ID) return seg.statusId
+  }
+  return null
+}
+
+/**
+ * 用某个状态铺满一整天的「开局」：事件从 0 点延续下来。
+ * 和 setStatusFrom 的存储模型一致 —— 状态一直记到 24:00，展示时再按「此刻」裁剪。
+ */
+export function seedDay(statusId: string): Segment[] {
+  return normalize([{ id: newId('seed'), start: 0, end: DAY_MINUTES, statusId }])
+}
+
 function clamp(v: number, min: number, max: number): number {
   if (Number.isNaN(v)) return min
   return Math.max(min, Math.min(max, v))
