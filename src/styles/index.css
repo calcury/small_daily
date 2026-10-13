@@ -1484,13 +1484,17 @@ strong {
   pointer-events: none;
 }
 
-/* 其它时段：浅色铺底 */
+/* 其它时段：用和正常一致的颜色铺底 */
 .rtp-bg-seg {
   position: absolute;
   top: 0;
   bottom: 0;
-  opacity: 0.24;
-  border-radius: 3px;
+  border-radius: 0;
+}
+
+/* 「空」以及正在编辑的那一段：用空色占位，拖动时能实时看到挖空 / 覆盖的效果 */
+.rtp-bg-seg.is-none {
+  background: var(--surface-3);
 }
 
 .rtp-grid {
@@ -1524,7 +1528,7 @@ strong {
   overflow: hidden;
   cursor: grab;
   touch-action: none;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, #fff 40%, transparent), var(--shadow-sm);
+  box-shadow: inset 0 0 0 2px var(--text), var(--shadow-sm);
 }
 
 .rtp-selected.is-none {

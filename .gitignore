@@ -32,3 +32,4 @@ pnpm-debug.log*
 # 开发期临时产物
 .preview/
 .tmp-*
+vite.config.ts.timestamp-*.mjs

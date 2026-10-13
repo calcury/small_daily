@@ -25,10 +25,32 @@ execSync(
   `"${path.join(ROOT, 'node_modules', '.bin', 'esbuild.cmd')}" scripts/gen-demo.mjs --bundle --platform=node --format=esm --outfile="${demoBundle}" --log-level=error`,
   { cwd: ROOT, stdio: 'inherit' }
 )
-const demoJson = execSync(`node "${demoBundle}"`, { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 })
+const rawDemoJson = execSync(`node "${demoBundle}"`, { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 })
   .toString()
   .trim()
 rmSync(demoBundle, { force: true })
+
+// 给「今天」换上一份可预期的作息，其中特意留出大段「空」，用来验证
+// 「点空 = 整段选中，而不是切一个短事件出来」。
+const demoData = JSON.parse(rawDemoJson)
+const nowDate = new Date()
+const pad2 = (n) => String(n).padStart(2, '0')
+const TODAY_KEY = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(
+  nowDate.getDate()
+)}`
+demoData.days[TODAY_KEY] = {
+  date: TODAY_KEY,
+  segments: [
+    { id: 'fx-sleep', start: 0, end: 4 * 60, statusId: 'sleep' },
+    { id: 'fx-gap-am', start: 4 * 60, end: 9 * 60, statusId: 'none' },
+    { id: 'fx-work', start: 9 * 60, end: 12 * 60, statusId: 'work' },
+    { id: 'fx-rest', start: 12 * 60, end: 13 * 60, statusId: 'rest' },
+    { id: 'fx-study', start: 13 * 60, end: 18 * 60, statusId: 'study' },
+    { id: 'fx-gap-pm', start: 18 * 60, end: 24 * 60, statusId: 'none' },
+  ],
+  updatedAt: Date.now(),
+}
+const demoJson = JSON.stringify(demoData)
 
 const chrome = spawn(
   CHROME,
@@ -234,6 +256,58 @@ async function main() {
   expect('首页已移除「时段明细」', home.removedSegmentList === 0, String(home.removedSegmentList))
   expect('时间轴仍在', home.hasTimeline)
   expect('时间轴有「添加时段」入口', home.addButtons.includes('添加时段'), home.addButtons.join('/'))
+
+  // ---------- 点「空」：应整段选中，不切短事件 ----------
+  const gapProbe = await evaluate(`(() => {
+    const segs = [...document.querySelectorAll('.tl-seg.is-none')]
+    if (!segs.length) return null
+    const el = segs.reduce((a, b) =>
+      parseFloat(b.style.width) > parseFloat(a.style.width) ? b : a
+    )
+    const r = el.getBoundingClientRect()
+    return {
+      widthPct: parseFloat(el.style.width),
+      title: el.title,
+      x: Math.round(r.left + r.width / 2),
+      y: Math.round(r.top + r.height / 2)
+    }
+  })()`)
+  console.log('最大的「空」段:', gapProbe)
+  expect('时间轴上存在「空」段', Boolean(gapProbe))
+
+  await mouse('mousePressed', gapProbe.x, gapProbe.y)
+  await mouse('mouseReleased', gapProbe.x, gapProbe.y)
+  await wait(600)
+
+  const gapEditor = await evaluate(`({
+    sheetOpen: !!document.querySelector('.sheet'),
+    title: document.querySelector('.sheet-title')?.textContent ?? null,
+    activeChip: document.querySelector('.status-chip.is-active')?.textContent?.trim() ?? null,
+    range: (() => {
+      const bs = document.querySelectorAll('.rtp-readout-time b')
+      return { start: bs[0]?.textContent ?? null, end: bs[1]?.textContent ?? null }
+    })(),
+    selectedPct: parseFloat(document.querySelector('.rtp-selected')?.style.width ?? '0')
+  })`)
+  console.log('点「空」后:', gapEditor)
+  expect('点「空」也能打开编辑器', gapEditor.sheetOpen)
+  expect('「空」被当作事件选中', /无/.test(gapEditor.activeChip ?? ''), String(gapEditor.activeChip))
+  expect(
+    '选中的就是整段「空」，没有被切成 1 小时',
+    Math.abs(gapEditor.selectedPct - gapProbe.widthPct) < 1,
+    `段宽 ${gapProbe.widthPct}% vs 选中 ${gapEditor.selectedPct}%`
+  )
+  await shoot('05b-editor-none')
+
+  // 关掉，继续后面的拖拽用例
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `[...document.querySelectorAll('.sheet-actions .btn')].find(b => b.textContent.includes('取消'))?.click(); 'ok'`,
+    },
+    sessionId
+  )
+  await wait(400)
 
   // ---------- 点选时间轴 → 打开带拖动分界线的编辑器 ----------
   const barPoint = await evaluate(`(() => {

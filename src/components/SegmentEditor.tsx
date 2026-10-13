@@ -12,7 +12,7 @@ interface SegmentEditorProps {
   open: boolean
   /** 传入则代表编辑已有区段，null 代表新建 */
   editing: Segment | null
-  /** 当天全部区段，用于拖动画布上的浅色背景 */
+  /** 当天全部区段，用于在拖动画布上画背景 */
   segments: Segment[]
   statuses: StatusDef[]
   statusMap: Record<string, StatusDef>
@@ -117,7 +117,7 @@ export function SegmentEditor({
       open={open}
       tall
       title={editing && editing.statusId !== NONE_STATUS_ID ? '修改时段' : '设置时段'}
-      subtitle="拖动两侧的分界线调整时间，浅色是当天的其它时段"
+      subtitle="拖动两侧的分界线调整时间，背景是当天的其它时段"
       onClose={onClose}
       footer={
         <div className="sheet-actions">
@@ -155,6 +155,7 @@ export function SegmentEditor({
     >
       <TimeRangePicker
         segments={segments}
+        editingId={editing?.id ?? null}
         statusMap={statusMap}
         noneStatus={noneStatus}
         start={start}

@@ -27,8 +27,6 @@ type TabKey = 'today' | 'stats' | 'settings'
 
 /** 拖动吸附粒度，与编辑器保持一致 */
 const SNAP = 5
-/** 「无」时段超过这个长度时，点开会先切出一小时的窗口，方便直接拖动定义 */
-const CARVE_THRESHOLD = 180
 
 function floorTo(value: number, step: number): number {
   return Math.floor(value / step) * step
@@ -108,36 +106,16 @@ export function App() {
   )
 
   /**
-   * 点选时间轴上的某一处：
-   *  - 有状态的时段 → 打开编辑器改这一整段
-   *  - 很长的「无」时段 → 在点击位置切出一小时窗口，拖两下就能定下范围
+   * 点选时间轴上的某一处：直接把这一整段作为被选中事件打开。
+   * 无论是彩色时段还是灰色的「空」，行为完全一致 —— 一样能拖分界线改长度、改状态。
    */
-  const openEditorAt = (segment: Segment, minute: number) => {
+  const openEditorAt = (segment: Segment) => {
     setSelectedId(segment.id)
-
-    if (segment.statusId === NONE_STATUS_ID && segment.end - segment.start > CARVE_THRESHOLD) {
-      const start = Math.max(
-        segment.start,
-        Math.min(floorTo(minute, SNAP), segment.end - 60)
-      )
-      setEditing(null)
-      setEditorInitial({
-        start,
-        end: Math.min(segment.end, start + 60),
-        statusId: customStatuses[0]?.id ?? NONE_STATUS_ID,
-      })
-      setEditorOpen(true)
-      return
-    }
-
     setEditing(segment)
     setEditorInitial({
       start: segment.start,
       end: segment.end,
-      statusId:
-        segment.statusId === NONE_STATUS_ID
-          ? customStatuses[0]?.id ?? NONE_STATUS_ID
-          : segment.statusId,
+      statusId: segment.statusId,
     })
     setEditorOpen(true)
   }
