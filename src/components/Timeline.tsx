@@ -14,8 +14,6 @@ interface TimelineProps {
   nowMinute: number | null
   /** 昨天的时间轴（对照条）；没有记录时可为空数组 */
   yesterdaySegments: Segment[]
-  /** 昨天对照条左侧的小标签，如「昨天」 */
-  yesterdayLabel: string
   selectedId: string | null
   /** 点选某一段，同时带上点击位置的分钟数 */
   onPick: (segment: Segment, minute: number) => void
@@ -37,7 +35,6 @@ export function Timeline({
   noneStatus,
   nowMinute,
   yesterdaySegments,
-  yesterdayLabel,
   selectedId,
   onPick,
   onAdd,
@@ -118,7 +115,6 @@ export function Timeline({
         {/* 昨天：一条更细的对照条 */}
         {yesterdaySegments.length > 0 ? (
           <div className="tl-yesterday">
-            <span className="tl-yesterday-tag">{yesterdayLabel}</span>
             <div className="tl-yesterday-bar">
               {renderSegments(
                 yesterdaySegments,

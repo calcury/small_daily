@@ -14,6 +14,23 @@ interface SheetProps {
 
 /** 移动端友好的底部抽屉。桌面端会自动收成居中弹层。 */
 export function Sheet({ open, title, subtitle, onClose, children, footer, tall }: SheetProps) {
+  /**
+   * 刚弹出的这一小段时间里，抽屉整体不接收指针事件。
+   *
+   * 原因：移动端在 touchend 之后还会补发一次「兼容性鼠标事件」，落点就是刚才手指的位置。
+   * 抽屉已经在这之前弹出来了，那一发就会正好点在新出现的控件上 —— 比如「精确到分钟」
+   * 里的原生时间输入框，于是「抽屉一弹出来，时间选择器也跟着弹出来」。
+   * 挡住这一发，时间选择器就只会在你真正点到它时才出现。
+   */
+  const [opening, setOpening] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setOpening(true)
+    const id = window.setTimeout(() => setOpening(false), 350)
+    return () => window.clearTimeout(id)
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
@@ -31,7 +48,11 @@ export function Sheet({ open, title, subtitle, onClose, children, footer, tall }
   if (!open) return null
 
   return (
-    <div className="sheet-backdrop" onPointerDown={onClose} role="presentation">
+    <div
+      className={`sheet-backdrop${opening ? ' is-opening' : ''}`}
+      onPointerDown={onClose}
+      role="presentation"
+    >
       <div
         className={`sheet${tall ? ' sheet--tall' : ''}`}
         role="dialog"

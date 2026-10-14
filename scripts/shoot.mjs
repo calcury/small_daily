@@ -373,6 +373,18 @@ async function main() {
     addButtons: [...document.querySelectorAll('.mini-btn')].map(b => b.textContent.trim()),
     yesterdayTag: document.querySelector('.tl-yesterday-tag')?.textContent ?? null,
     yesterdaySegs: document.querySelectorAll('.tl-yesterday-seg').length,
+    yesterdayBar: (() => {
+      const el = document.querySelector('.tl-yesterday-bar')
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { left: Math.round(r.left), width: Math.round(r.width) }
+    })(),
+    mainBar: (() => {
+      const el = document.querySelector('.tl-bar')
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { left: Math.round(r.left), width: Math.round(r.width) }
+    })(),
     visibleWidthSum: [...document.querySelectorAll('.tl-bar .tl-seg')]
       .reduce((acc, el) => acc + parseFloat(el.style.width || '0'), 0),
     scrollbarWidth: getComputedStyle(document.documentElement).scrollbarWidth,
@@ -387,8 +399,19 @@ async function main() {
   expect('「今日」保留顶部日期导航', home.hasDateNav === true)
 
   // 昨天对照条
-  expect('时间轴上方有昨日细对照轴', home.yesterdayTag === '昨天' && home.yesterdaySegs > 0,
-    `tag=${home.yesterdayTag} segs=${home.yesterdaySegs}`)
+  expect(
+    '时间轴上方有昨日细对照轴，且不写「昨天」两个字',
+    home.yesterdayTag === null && home.yesterdaySegs > 0,
+    `tag=${home.yesterdayTag} segs=${home.yesterdaySegs}`
+  )
+  expect(
+    '昨天对照条和时间轴左右对齐',
+    home.yesterdayBar !== null &&
+      home.mainBar !== null &&
+      Math.abs(home.yesterdayBar.left - home.mainBar.left) < 2 &&
+      Math.abs(home.yesterdayBar.width - home.mainBar.width) < 2,
+    `${JSON.stringify(home.yesterdayBar)} vs ${JSON.stringify(home.mainBar)}`
+  )
 
   // 未来留白：画出来的宽度只到「此刻」（19:25 → 80.9%）
   const expectedNowPct = (NOW_MINUTE / 1440) * 100
@@ -805,6 +828,51 @@ async function main() {
   expect('有记录的日子带小圆点', cal.dots > 0, String(cal.dots))
   await shoot('10-calendar')
 
+  // 再按同一个地方（真实鼠标，走命中测试）→ 收起日历
+  const navPoint = await evaluate(`(() => {
+    const r = document.querySelector('.datenav-center').getBoundingClientRect()
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
+  })()`)
+  const clickAt = async (point) => {
+    await mouse('mousePressed', point.x, point.y)
+    await mouse('mouseReleased', point.x, point.y)
+    await wait(400)
+  }
+  await clickAt(navPoint)
+  expect('再按一次日期区会收起日历', (await evaluate(`!!document.querySelector('.cal-grid')`)) === false)
+
+  // 再按一次又能打开（是开关，不是只能开）
+  await clickAt(navPoint)
+  expect('同一个按钮再按一次又能打开日历', (await evaluate(`!!document.querySelector('.cal-grid')`)) === true)
+
+  // 点抽屉外面那片遮罩同样能收起
+  const outsidePoint = await evaluate(`(() => {
+    for (let y = 150; y < 420; y += 10) {
+      const el = document.elementFromPoint(195, y)
+      if (el && el.classList && el.classList.contains('sheet-backdrop')) return { x: 195, y }
+    }
+    return null
+  })()`)
+  if (outsidePoint) await clickAt(outsidePoint)
+  expect(
+    '点抽屉外的遮罩也能收起日历',
+    outsidePoint !== null && (await evaluate(`!!document.querySelector('.cal-grid')`)) === false,
+    String(JSON.stringify(outsidePoint))
+  )
+
+  // 兜底：保证日历回到「打开」，继续后面的流程
+  await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `(() => {
+        if (!document.querySelector('.cal-grid')) document.querySelector('.datenav-center').click()
+        return true
+      })()`,
+    },
+    sessionId
+  )
+  await wait(400)
+
   const [yy, ymm, yd] = YESTERDAY_KEY.split('-').map(Number)
   const yesterdayLabel = `${ymm} 月 ${yd} 日`
   await cdp.send(
@@ -960,6 +1028,18 @@ async function main() {
     sessionId
   )
   await wait(400)
+  const pickerUi = await evaluate(`({
+    title: document.querySelector('.sheet-title')?.textContent ?? null,
+    hasSwitchFrom: !!document.querySelector('.switch-from'),
+    hasTimeInput: !!document.querySelector('.sheet .time-input'),
+    items: document.querySelectorAll('.picker-item').length
+  })`)
+  console.log('切换状态抽屉:', pickerUi)
+  expect(
+    '「切换状态」里已去掉「从这一刻开始」那一步',
+    pickerUi.title === '切换状态' && pickerUi.hasSwitchFrom === false && pickerUi.hasTimeInput === false,
+    JSON.stringify(pickerUi)
+  )
   await cdp.send(
     'Runtime.evaluate',
     {
@@ -1252,6 +1332,112 @@ async function main() {
     JSON.stringify(seedAfter.last)
   )
   await shoot('17-next-day-recorded', { full: true })
+
+  // ---------- 移动端「鬼点」：抽屉弹出的那一瞬间不该误触发里面的控件 ----------
+  // 真机上 touchend 之后还会补发一次「兼容性鼠标事件」，落点就是刚才手指的位置；
+  // 抽屉已经弹出来了，那一发会正好点在新出现的控件上 —— 原生时间选择器就是这样被点开的。
+  await setViewport(390, 600)
+  const tapPoint = await evaluate(`(() => {
+    const r = document.querySelector('.tl-bar').getBoundingClientRect()
+    return { x: Math.round(r.left + r.width * 0.42), y: Math.round(r.top + r.height / 2) }
+  })()`)
+  await cdp.send(
+    'Emulation.setTouchEmulationEnabled',
+    { enabled: true, configuration: 'mobile' },
+    sessionId
+  )
+  await cdp.send(
+    'Input.dispatchTouchEvent',
+    {
+      type: 'touchStart',
+      touchPoints: [{ x: tapPoint.x, y: tapPoint.y, radiusX: 8, radiusY: 8, force: 1 }],
+    },
+    sessionId
+  )
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId)
+  await wait(30)
+  // 补发的那一发，落点不变
+  await mouse('mousePressed', tapPoint.x, tapPoint.y)
+  await mouse('mouseReleased', tapPoint.x, tapPoint.y)
+  await wait(500)
+  const ghost = await evaluate(`({
+    sheetOpen: !!document.querySelector('.sheet'),
+    title: document.querySelector('.sheet-title')?.textContent ?? null,
+    readout: document.querySelector('.rtp-readout-time')?.textContent ?? null,
+    activeIsInput: document.activeElement ? document.activeElement.tagName === 'INPUT' : false,
+    activeType: document.activeElement && document.activeElement.getAttribute
+      ? document.activeElement.getAttribute('type')
+      : null,
+    landsOn: (() => {
+      const el = document.elementFromPoint(${tapPoint.x}, ${tapPoint.y})
+      return el ? (el.className || el.tagName) : null
+    })()
+  })`)
+  console.log('鬼点:', ghost)
+  // 点中的是「睡觉 0:00 → 19:25」这一段，鬼点不该把范围改掉任何一点
+  const ghostExpected = `00:00→${pad2(Math.floor(NOW_MINUTE / 60))}:${pad2(NOW_MINUTE % 60)}`
+  expect(
+    '抽屉弹出瞬间的「鬼点」不会误触里面的控件',
+    ghost.sheetOpen === true &&
+      ghost.readout === ghostExpected &&
+      ghost.activeIsInput === false,
+    JSON.stringify(ghost)
+  )
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
+  await shoot('18-ghost-tap')
+
+  // ---------- 反向自检 ----------
+  // 上面那条断言靠一个「落点巧合」：抽屉弹出后，刚才点时间轴的坐标正好压到
+  // 「精确到分钟」那一行（log 里的 landsOn）。把守卫撤掉后同一发鬼点必须真的误触，
+  // 否则说明落点变了 —— 那条断言其实什么也没验证。
+  await cdp.send(
+    'Input.dispatchKeyEvent',
+    { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
+    sessionId
+  )
+  await cdp.send(
+    'Input.dispatchKeyEvent',
+    { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
+    sessionId
+  )
+  await wait(350)
+  await evaluate(
+    `(() => {
+      const s = document.createElement('style')
+      s.textContent = '.sheet-backdrop.is-opening{pointer-events:auto !important}'
+      document.head.appendChild(s)
+      return true
+    })()`
+  )
+  await cdp.send(
+    'Emulation.setTouchEmulationEnabled',
+    { enabled: true, configuration: 'mobile' },
+    sessionId
+  )
+  await cdp.send(
+    'Input.dispatchTouchEvent',
+    {
+      type: 'touchStart',
+      touchPoints: [{ x: tapPoint.x, y: tapPoint.y, radiusX: 8, radiusY: 8, force: 1 }],
+    },
+    sessionId
+  )
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId)
+  await wait(30)
+  await mouse('mousePressed', tapPoint.x, tapPoint.y)
+  await mouse('mouseReleased', tapPoint.x, tapPoint.y)
+  await wait(500)
+  const ghostNoGuard = await evaluate(`({
+    readout: document.querySelector('.rtp-readout-time')?.textContent ?? null,
+    activeIsInput: document.activeElement ? document.activeElement.tagName === 'INPUT' : false
+  })`)
+  console.log('鬼点(撤掉守卫):', ghostNoGuard)
+  expect(
+    '反向自检：撤掉守卫后鬼点确实会误触（证明上面那条不是白测的）',
+    ghostNoGuard.readout !== ghostExpected || ghostNoGuard.activeIsInput === true,
+    `readout=${ghostNoGuard.readout}`
+  )
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
 
   ws.close()
   chrome.kill()

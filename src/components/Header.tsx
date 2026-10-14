@@ -14,7 +14,7 @@ interface HeaderProps {
   dateKey: string
   todayKey: string
   onDateChange: (key: string) => void
-  /** 打开日历 */
+  /** 开关日历（同一个按钮切换：再按一次收起） */
   onOpenCalendar: () => void
   calendarOpen: boolean
   /** 是否显示日期导航（只在「今日」有意义，别的标签页不显示） */
@@ -51,7 +51,7 @@ export function Header({
   }
 
   return (
-    <header className="hdr">
+    <header className={`hdr${calendarOpen ? ' hdr--above-sheet' : ''}`}>
       <div className="hdr-row">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
@@ -109,7 +109,7 @@ export function Header({
             onClick={onOpenCalendar}
             aria-haspopup="dialog"
             aria-expanded={calendarOpen}
-            aria-label="打开日历选择日期"
+            aria-label={calendarOpen ? '收起日历' : '打开日历选择日期'}
           >
             <span className="datenav-main">
               {monthDayLabel(dateKey)}

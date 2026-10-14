@@ -149,7 +149,6 @@ export function App() {
   /** 前一天的记录，画在时间轴上方作为对照（没有记录就不显示这条） */
   const compareSegments = getSegments(compareKey)
   const compareHasData = compareSegments.some((s) => s.statusId !== NONE_STATUS_ID)
-  const compareLabel = isToday ? '昨天' : shortDateLabel(compareKey)
 
   /**
    * 点选时间轴上的某一处：把这一段作为被选中事件打开（今天截到此刻为止）。
@@ -221,7 +220,7 @@ export function App() {
           dateKey={dateKey}
           todayKey={todayKey}
           onDateChange={setDateKey}
-          onOpenCalendar={() => setCalendarOpen(true)}
+          onOpenCalendar={() => setCalendarOpen((prev) => !prev)}
           calendarOpen={calendarOpen}
           showDateNav={tab === 'today'}
           theme={theme}
@@ -278,7 +277,6 @@ export function App() {
                 noneStatus={noneStatus}
                 nowMinute={isToday ? currentMinute : null}
                 yesterdaySegments={compareHasData ? compareSegments : []}
-                yesterdayLabel={compareLabel}
                 selectedId={selectedId}
                 onPick={openEditorAt}
                 onAdd={openCreate}

@@ -169,6 +169,11 @@ strong {
   border-bottom: 1px solid var(--border);
 }
 
+/* 日历打开时把头部抬到抽屉遮罩之上：这样「再按一下同一个地方」真的能关掉日历 */
+.hdr--above-sheet {
+  z-index: 70;
+}
+
 .hdr-row {
   display: flex;
   align-items: center;
@@ -579,23 +584,12 @@ strong {
   background: rgba(0, 0, 0, 0.32);
 }
 
-/* 昨天：主时间轴上方一条更细的对照条 */
+/* 昨天：主时间轴上方一条更细的对照条（不加文字，和时间轴对齐） */
 .tl-yesterday {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin-bottom: 6px;
 }
 
-.tl-yesterday-tag {
-  flex: none;
-  width: 30px;
-  font-size: 10.5px;
-  color: var(--text-3);
-}
-
 .tl-yesterday-bar {
-  flex: 1;
   display: flex;
   height: 12px;
   overflow: hidden;
@@ -1431,6 +1425,12 @@ strong {
   animation: fade-in 0.16s ease;
 }
 
+/* 刚弹出的一瞬间不吃指针事件：挡掉移动端 touchend 之后补发的那一发
+   「兼容性鼠标事件」，否则它会点到抽屉里新出现的控件（如原生时间选择器）。 */
+.sheet-backdrop.is-opening {
+  pointer-events: none;
+}
+
 @media (min-width: 720px) {
   .sheet-backdrop {
     align-items: center;
@@ -1813,21 +1813,6 @@ strong {
 }
 
 /* ---------- 状态切换 ---------- */
-
-.switch-from {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
-.switch-from-label {
-  font-size: 12.5px;
-  color: var(--text-2);
-}
 
 .picker-grid {
   display: grid;
