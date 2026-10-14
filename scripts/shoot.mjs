@@ -603,6 +603,22 @@ async function main() {
       })(),
       selectedPct: parseFloat(document.querySelector('.rtp-selected')?.style.width ?? '0'),
       locked: !!document.querySelector('.rtp-locked'),
+      /* 「此刻」在轨道上的百分比，以及背景里最靠右的那块彩色到哪儿（%）。
+         今天此刻之后理应留白，所以彩色右边界不能越过此刻 —— 否则就是
+         「点空进面板，此刻之后被上一个时间段染色」的那个 bug。 */
+      bg: (() => {
+        const nowEl = document.querySelector('.rtp-now')
+        const nowPct = nowEl ? parseFloat(nowEl.style.left) : null
+        const rightEdges = [...document.querySelectorAll('.rtp-bg-seg')]
+          .filter((el) => el.style.background && el.style.background !== 'none')
+          .map((el) => parseFloat(el.style.left) + parseFloat(el.style.width))
+        return {
+          nowPct,
+          maxColoredRightPct: rightEdges.length ? Math.max(...rightEdges) : 0,
+          coloredCount: rightEdges.length,
+          segCount: document.querySelectorAll('.rtp-bg-seg').length
+        }
+      })(),
       footer: [...document.querySelectorAll('.sheet-actions .btn')].map(b => b.textContent.trim())
     })`)
   const closeEditor = async () => {
@@ -632,6 +648,38 @@ async function main() {
     '底部只剩「取消 / 保存」，没有多余的「设为无」',
     pastGap.footer.join(' / ') === '取消 / 保存',
     pastGap.footer.join(' / ')
+  )
+  // 今天：状态是「一路记到 24:00」的，示例数据里 20:00–24:00 就残留了一段 work。
+  // 此刻之后的背景必须留白，不能被那段旧状态（= 上一个时间段的颜色）染上色。
+  console.log('编辑器背景:', JSON.stringify(pastGap.bg))
+  expect(
+    '此刻之后的背景不留色（旧的未来段不画出来）',
+    pastGap.bg.nowPct !== null && pastGap.bg.maxColoredRightPct <= pastGap.bg.nowPct + 0.01,
+    `maxColoredRight=${pastGap.bg.maxColoredRightPct}% now=${pastGap.bg.nowPct}%`
+  )
+  expect(
+    '示例里那段纯未来的 work 不再出现在背景里',
+    pastGap.bg.coloredCount === 3,
+    `colored=${pastGap.bg.coloredCount} segs=${pastGap.bg.segCount}`
+  )
+  // 反向自检：先确认示例里真的存在「纯未来」的彩色段（否则上面两条等于没测），
+  // 再看背景确实比整天少画了那一段。
+  const demoSegs = await evaluate(`(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('small-daily:data:v1'))
+      return (raw.days[${JSON.stringify(TODAY_KEY)}]?.segments ?? []).map(s => ({ start: s.start, end: s.end, statusId: s.statusId }))
+    } catch (e) { return [] }
+  })()`)
+  const futureColored = demoSegs.filter((s) => s.statusId !== 'none' && s.start >= NOW_MINUTE)
+  expect(
+    '示例数据里确实有一段「纯未来」的彩色段（不然上面两条是空测）',
+    futureColored.length === 1,
+    JSON.stringify(demoSegs)
+  )
+  expect(
+    '背景比整天少画 1 段（正好是被裁掉的那段未来）',
+    pastGap.bg.segCount === demoSegs.length - 1,
+    `bg=${pastGap.bg.segCount} day=${demoSegs.length}`
   )
   await shoot('05b-editor-none')
 

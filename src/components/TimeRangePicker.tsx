@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { Segment, StatusDef } from '../types'
 import { DAY_MINUTES, NONE_STATUS_ID } from '../types'
+import { clipSegments } from '../lib/segments'
 import { minutesToLabel } from '../lib/time'
 
 /** 拖动吸附粒度（分钟） */
@@ -35,7 +36,8 @@ interface TimeRangePickerProps {
  *
  *  - 两条分界线可以左右滑动，拖动时吸附到 5 分钟
  *  - 今天只能改到「此刻」为止（之后的部分画成斜纹，拖不过去）；历史日期整天都能改
- *  - 背景用和正常一致的颜色画出当天的其它时段，方便知道会盖住谁
+ *  - 背景用和正常一致的颜色画出当天的其它时段，方便知道会盖住谁；
+ *    今天只画到「此刻」为止，之后留白 —— 和时间轴保持一致
  *
  * 命中判定放在画布上统一做（「离哪条线更近就拖哪条」），
  * 所以哪怕区间只有几分钟、两条线几乎重叠，也依然分得开。
@@ -60,6 +62,15 @@ export function TimeRangePicker({
 
   /** 可编辑的最晚时间：今天卡在「此刻」，历史日期整天都能改 */
   const maxMinute = nowMinute ?? DAY_MINUTES
+
+  /**
+   * 背景要画的区段。
+   *
+   * 今天只画到「此刻」为止，之后一律留白（和时间轴同一个规矩）：状态是「一路记到 24:00」
+   * 的，所以把一段彩色时段改短之后，此刻之后总会残留一段旧状态；那段还没发生、也不可编辑，
+   * 画出来只会让人以为「此刻之后又变成上一个时间段的颜色了」。
+   */
+  const bgSegments = nowMinute === null ? segments : clipSegments(segments, nowMinute)
 
   const snap = (minute: number) =>
     Math.max(0, Math.min(DAY_MINUTES, Math.round(minute / SNAP) * SNAP))
@@ -162,7 +173,7 @@ export function TimeRangePicker({
         >
           {/* 背景：当天其它时段用正常颜色；正在编辑的那一段先按「空」占位 */}
           <div className="rtp-bg" aria-hidden="true">
-            {segments.map((segment) => {
+            {bgSegments.map((segment) => {
               const status = statusMap[segment.statusId] ?? noneStatus
               const asNone = segment.id === editingId || status.id === NONE_STATUS_ID
               return (
